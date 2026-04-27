@@ -3,8 +3,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@iota/dapp-kit";
-import { IotaClient, type ChainType } from "@iota/iota-sdk/client";
+import { IotaClient } from "@iota/iota-sdk/client";
 import { fetchTaskSchedules, prepareScheduledTaskActionWallet } from "../lib/api";
+import { getChainForOracleNetwork } from "../lib/iotaNetwork";
 import type {
   OracleNetwork,
   ScheduledTaskActionRequest,
@@ -34,12 +35,6 @@ const DEVNET_RPC_URL =
   import.meta.env.VITE_IOTA_DEVNET_RPC_URL?.trim() ||
   import.meta.env.VITE_IOTA_RPC_URL?.trim() ||
   "https://api.devnet.iota.cafe";
-
-const CHAIN_BY_NETWORK: Record<OracleNetwork, ChainType> = {
-  mainnet: "iota:mainnet",
-  testnet: "iota:testnet",
-  devnet: "iota:devnet",
-};
 
 function shortAddress(address: string | null | undefined, start = 6, end = 4): string {
   const value = String(address ?? "").trim();
@@ -481,7 +476,7 @@ export default function TaskSchedulesPage({
       const prepared = await prepareScheduledTaskActionWallet(action, currentAccount.address, activeNetwork);
       const execution = await signAndExecuteTransaction({
         transaction: prepared.serializedTransaction,
-        chain: CHAIN_BY_NETWORK[activeNetwork],
+        chain: getChainForOracleNetwork(activeNetwork),
       });
 
       const digest = String((execution as any)?.digest ?? "").trim();

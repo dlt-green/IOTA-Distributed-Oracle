@@ -3,11 +3,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@iota/dapp-kit";
-import { IotaClient, type ChainType } from "@iota/iota-sdk/client";
+import { IotaClient } from "@iota/iota-sdk/client";
 import {
   prepareNodeManagementWallet,
   prepareProposalApprovalWallet,
 } from "../lib/api";
+import { getChainForOracleNetwork } from "../lib/iotaNetwork";
 import type { OracleNetwork, OracleStatus, OracleTemplateCost } from "../types";
 
 type Props = {
@@ -22,12 +23,6 @@ const DEVNET_RPC_URL =
   import.meta.env.VITE_IOTA_DEVNET_RPC_URL?.trim() ||
   import.meta.env.VITE_IOTA_RPC_URL?.trim() ||
   "https://api.devnet.iota.cafe";
-
-const CHAIN_BY_NETWORK: Record<OracleNetwork, ChainType> = {
-  mainnet: "iota:mainnet",
-  testnet: "iota:testnet",
-  devnet: "iota:devnet",
-};
 
 function normalizeAddress(value: unknown): string {
   const text = String(value ?? "").trim().toLowerCase();
@@ -253,7 +248,7 @@ export default function NodeManagementPage({ activeNetwork, status, onChanged }:
       const prepared = await prepareNodeManagementWallet(selectedTemplateIds, currentAccount.address, activeNetwork);
       const execution = await signAndExecuteTransaction({
         transaction: prepared.serializedTransaction,
-        chain: CHAIN_BY_NETWORK[activeNetwork],
+        chain: getChainForOracleNetwork(activeNetwork),
       });
       const digest = String((execution as any)?.digest ?? "").trim();
       await waitForDigest(digest);
@@ -288,7 +283,7 @@ export default function NodeManagementPage({ activeNetwork, status, onChanged }:
       );
       const execution = await signAndExecuteTransaction({
         transaction: prepared.serializedTransaction,
-        chain: CHAIN_BY_NETWORK[activeNetwork],
+        chain: getChainForOracleNetwork(activeNetwork),
       });
       const digest = String((execution as any)?.digest ?? "").trim();
       await waitForDigest(digest);

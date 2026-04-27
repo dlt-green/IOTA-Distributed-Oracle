@@ -3,8 +3,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCurrentAccount, useSignTransaction } from '@iota/dapp-kit';
-import { IotaClient, type ChainType } from '@iota/iota-sdk/client';
+import { IotaClient } from '@iota/iota-sdk/client';
 import { fetchExampleContent, fetchTaskSchedules, prepareWalletTask, prepareWalletTaskSchedule } from '../lib/api';
+import { getChainForOracleNetwork } from '../lib/iotaNetwork';
 import { resolveApiBaseUrl } from '../lib/apiBase';
 import { validateTaskMultisig } from '../lib/multisigValidation';
 import type {
@@ -136,12 +137,6 @@ const DEVNET_RPC_URL =
   import.meta.env.VITE_IOTA_DEVNET_RPC_URL?.trim() ||
   import.meta.env.VITE_IOTA_RPC_URL?.trim() ||
   'https://api.devnet.iota.cafe';
-
-const CHAIN_BY_NETWORK: Record<OracleNetwork, ChainType> = {
-  mainnet: 'iota:mainnet',
-  testnet: 'iota:testnet',
-  devnet: 'iota:devnet',
-};
 
 function asRecord(value: unknown): Record<string, any> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
@@ -1621,7 +1616,7 @@ export default function TaskRunner({
       }
 
       const networkClient = iotaClients[activeNetwork];
-      const chain = CHAIN_BY_NETWORK[activeNetwork];
+      const chain = getChainForOracleNetwork(activeNetwork);
       const startMs = schedulePreview.startMs;
       const budgetNanoIota = parseIotaToNano(scheduleInitialFundsIota);
       if (budgetNanoIota <= 0n) {
