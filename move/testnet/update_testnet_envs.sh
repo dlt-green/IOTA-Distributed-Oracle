@@ -102,6 +102,7 @@ def remove_keys(path: Path, keys: list[str]) -> None:
 
 client_env = repo_root / "client" / ".env"
 node_env = repo_root / "node" / ".env"
+node_example = repo_root / "node" / ".env.example"
 webview_example = repo_root / "webview" / ".env.example"
 webview_env = repo_root / "webview" / ".env"
 
@@ -162,9 +163,11 @@ legacy_generic_runtime_keys = [
 
 upsert_lines(client_env, [*client_network_pairs, *runtime_pairs])
 upsert_lines(node_env, node_pairs)
+upsert_lines(node_example, node_pairs)
 upsert_lines(webview_env, webview_pairs)
 upsert_lines(webview_example, webview_pairs)
 remove_keys(node_env, legacy_node_runtime_keys)
+remove_keys(node_example, legacy_node_runtime_keys)
 remove_keys(client_env, legacy_generic_runtime_keys)
 remove_keys(webview_env, legacy_generic_runtime_keys)
 remove_keys(webview_example, legacy_generic_runtime_keys)

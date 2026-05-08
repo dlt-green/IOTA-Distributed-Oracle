@@ -199,6 +199,7 @@ client_pairs = [
 
 node_files = [
     repo_root / "node" / ".env",
+    repo_root / "node" / ".env.example",
 ]
 node_pairs = [
     ("DEVNET_IOTA_RPC_URL", "https://api.devnet.iota.cafe"),
