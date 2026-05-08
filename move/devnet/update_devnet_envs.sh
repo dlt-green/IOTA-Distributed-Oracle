@@ -50,9 +50,7 @@ def object_id_for_type(text: str, suffix: str) -> str | None:
 def first_env_value(key: str) -> str | None:
     candidate_files = [
         repo_root / "client" / ".env",
-        repo_root / "client" / ".env.example_devnet",
         repo_root / "node" / ".env",
-        repo_root / "node" / ".env.example_devnet",
         repo_root / "webview" / ".env",
         repo_root / "webview" / ".env.example",
     ]
@@ -187,7 +185,6 @@ def remove_keys(path: Path, keys: list[str]) -> None:
 
 client_files = [
     repo_root / "client" / ".env",
-    repo_root / "client" / ".env.example_devnet",
 ]
 client_pairs = [
     ("DEVNET_IOTA_RPC_URL", "https://api.devnet.iota.cafe"),
@@ -202,7 +199,6 @@ client_pairs = [
 
 node_files = [
     repo_root / "node" / ".env",
-    repo_root / "node" / ".env.example_devnet",
 ]
 node_pairs = [
     ("DEVNET_IOTA_RPC_URL", "https://api.devnet.iota.cafe"),
