@@ -894,13 +894,32 @@ app.post("/api/tasks/execute", async (req, res) => {
 });
 
 const distPath = path.resolve(process.cwd(), "dist");
-app.use(express.static(distPath));
+app.use(
+  express.static(distPath, {
+    setHeaders(res, filePath) {
+      const normalizedPath = filePath.replace(/\\/g, "/");
+      if (normalizedPath.endsWith("/index.html")) {
+        res.setHeader("Cache-Control", "no-cache");
+        return;
+      }
+      if (normalizedPath.includes("/assets/")) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+    },
+  }),
+);
 
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) {
     res.status(404).json({ error: `API route not found: ${req.path}` });
     return;
   }
+
+  if (path.extname(req.path)) {
+    res.status(404).type("text/plain").send(`Static asset not found: ${req.path}`);
+    return;
+  }
+
   res.sendFile(path.join(distPath, "index.html"));
 });
 
