@@ -203,6 +203,61 @@ type TaskRunSummary = {
 };
 
 const TASK_STREAM_POLL_MS = 4_000;
+const EULA_FETCH_TIMEOUT_MS = 5_000;
+
+async function readBundledEula(): Promise<string> {
+  const candidates = [
+    path.join(process.cwd(), "dist", "EULA.md"),
+    path.join(process.cwd(), "public", "EULA.md"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return await fs.promises.readFile(candidate, "utf8");
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  throw new Error("Bundled EULA.md not found.");
+}
+
+async function fetchLiveEula(): Promise<string> {
+  if (!config.eulaSourceUrl) {
+    throw new Error("EULA_SOURCE_URL is not configured.");
+  }
+
+  const headers: Record<string, string> = {
+    Accept: "text/plain, text/markdown, */*",
+  };
+  if (config.eulaSourceToken) {
+    headers.Authorization = `Bearer ${config.eulaSourceToken}`;
+  }
+
+  const response = await fetch(config.eulaSourceUrl, {
+    headers,
+    signal: AbortSignal.timeout(EULA_FETCH_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to load live EULA (${response.status})`);
+  }
+
+  return response.text();
+}
+
+async function loadEulaMarkdown(): Promise<{ markdown: string; source: "live" | "bundled"; error?: string }> {
+  if (config.eulaSourceUrl) {
+    try {
+      return { markdown: await fetchLiveEula(), source: "live" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { markdown: await readBundledEula(), source: "bundled", error: message };
+    }
+  }
+
+  return { markdown: await readBundledEula(), source: "bundled" };
+}
 
 async function fetchTaskResults(
   client: IotaClient,
@@ -568,6 +623,20 @@ async function fetchTaskSnapshot(taskId: string, network?: OracleNetwork) {
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "iota_oracle_webview", time: new Date().toISOString() });
+});
+
+app.get("/api/legal/eula", async (_req, res) => {
+  try {
+    const result = await loadEulaMarkdown();
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-EULA-Source", result.source);
+    if (result.error) {
+      res.setHeader("X-EULA-Fallback-Reason", result.error.slice(0, 200));
+    }
+    res.type("text/markdown").send(result.markdown);
+  } catch (error) {
+    sendApiError(res, 500, error);
+  }
 });
 
 app.get("/api/status", async (req, res) => {

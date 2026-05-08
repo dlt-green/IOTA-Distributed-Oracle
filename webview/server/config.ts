@@ -125,6 +125,8 @@ export const config = {
   oracleMessageModule: process.env.ORACLE_MESSAGE_MODULE ?? "oracle_messages",
   activeWindowMinutes: toNumber(process.env.ACTIVE_WINDOW_MINUTES, 15),
   eventFetchLimit: toNumber(process.env.EVENT_FETCH_LIMIT, 100),
+  eulaSourceUrl: envAny("EULA_SOURCE_URL", "GIT_EULA_URL", "EULA_RAW_URL"),
+  eulaSourceToken: process.env.EULA_SOURCE_TOKEN?.trim() || "",
   oracleNodeAddresses: toList(process.env.ORACLE_NODE_ADDRESSES),
   oracleClientDir: clientDir,
   oracleExamplesDir: examplesDir,

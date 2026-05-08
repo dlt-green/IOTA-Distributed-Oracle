@@ -140,9 +140,9 @@ export default function TermsPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch("/EULA.md", { cache: "no-store" });
+        const response = await fetch("/api/legal/eula", { cache: "no-store" });
         if (!response.ok) {
-          throw new Error(`Unable to load EULA.md (${response.status})`);
+          throw new Error(`Unable to load EULA (${response.status})`);
         }
         const content = await response.text();
         if (!cancelled) {
@@ -174,15 +174,12 @@ export default function TermsPage() {
           <div className="eyebrow">Legal</div>
           <h2 className="terms-page-title">End User License Agreement</h2>
           <p className="terms-page-intro">
-            This page loads the current legal text published with the webview bundle and renders it in a readable format.
+            This page loads the current legal text from the configured source and renders it in a readable format.
           </p>
         </div>
         <div className="terms-page-actions">
-          <a className="terms-link-button" href="/EULA.md" target="_blank" rel="noreferrer">
+          <a className="terms-link-button" href="/api/legal/eula" target="_blank" rel="noreferrer">
             Open Markdown
-          </a>
-          <a className="terms-link-button terms-link-button-secondary" href="/EULA.txt" target="_blank" rel="noreferrer">
-            Open TXT
           </a>
         </div>
       </div>
