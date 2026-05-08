@@ -18,6 +18,7 @@ module iota_oracle_tasks::oracle_tasks {
     const MIN_INTERVAL_MS: u64 = 300000;
     const ROUND_TIMEOUT_MS: u64 = 30000;
     const MAX_RESULT_HISTORY: u64 = 20;
+    const SCHEDULER_TEMPLATE_ID: u64 = 0;
 
     const STATUS_ACTIVE: u8 = 1;
     const STATUS_SUSPENDED: u8 = 2;
@@ -355,7 +356,12 @@ module iota_oracle_tasks::oracle_tasks {
             rotate_head_to_tail(&mut queue.node_ids);
             i = i + 1;
         };
-        refresh_scheduler_queue(queue, node_registry, sender_id);
+        let completed_node_id = if (sender_id == previous_head_id) {
+            sender_id
+        } else {
+            0
+        };
+        refresh_scheduler_queue(queue, node_registry, completed_node_id);
         assert!(vector::length(&queue.node_ids) > 0, ENoSchedulerNodes);
 
         queue.active_round_started_ms = now;
@@ -1450,7 +1456,10 @@ module iota_oracle_tasks::oracle_tasks {
         let nodes_ref = systemState::oracle_nodes(node_registry);
         let mut i = 0;
         while (i < vector::length(nodes_ref)) {
-            vector::push_back(&mut queue.node_ids, systemState::oracle_node_id(vector::borrow(nodes_ref, i)));
+            let node = vector::borrow(nodes_ref, i);
+            if (systemState::oracle_node_accepts_template(node, SCHEDULER_TEMPLATE_ID)) {
+                vector::push_back(&mut queue.node_ids, systemState::oracle_node_id(node));
+            };
             i = i + 1;
         };
     }
@@ -1460,7 +1469,11 @@ module iota_oracle_tasks::oracle_tasks {
         let mut i = 0;
         while (i < vector::length(&queue.node_ids)) {
             let node_id = *vector::borrow(&queue.node_ids, i);
-            if (node_id != completed_node_id && node_exists_by_id(node_registry, node_id) && !contains_u64(&preserved, node_id)) {
+            if (
+                node_id != completed_node_id &&
+                node_supports_scheduler_by_id(node_registry, node_id) &&
+                !contains_u64(&preserved, node_id)
+            ) {
                 vector::push_back(&mut preserved, node_id);
             };
             i = i + 1;
@@ -1469,14 +1482,19 @@ module iota_oracle_tasks::oracle_tasks {
         let nodes_ref = systemState::oracle_nodes(node_registry);
         let mut j = 0;
         while (j < vector::length(nodes_ref)) {
-            let node_id = systemState::oracle_node_id(vector::borrow(nodes_ref, j));
-            if (node_id != completed_node_id && !contains_u64(&preserved, node_id)) {
+            let node = vector::borrow(nodes_ref, j);
+            let node_id = systemState::oracle_node_id(node);
+            if (
+                node_id != completed_node_id &&
+                systemState::oracle_node_accepts_template(node, SCHEDULER_TEMPLATE_ID) &&
+                !contains_u64(&preserved, node_id)
+            ) {
                 vector::push_back(&mut preserved, node_id);
             };
             j = j + 1;
         };
 
-        if (completed_node_id != 0 && node_exists_by_id(node_registry, completed_node_id)) {
+        if (completed_node_id != 0 && node_supports_scheduler_by_id(node_registry, completed_node_id)) {
             vector::push_back(&mut preserved, completed_node_id);
         };
         queue.node_ids = preserved;
@@ -1491,8 +1509,10 @@ module iota_oracle_tasks::oracle_tasks {
         let mut count = 0;
         let mut i = 0;
         while (i < vector::length(nodes_ref)) {
-            let _node = vector::borrow(nodes_ref, i);
-            count = count + 1;
+            let node = vector::borrow(nodes_ref, i);
+            if (systemState::oracle_node_accepts_template(node, SCHEDULER_TEMPLATE_ID)) {
+                count = count + 1;
+            };
             i = i + 1;
         };
         count
@@ -1569,6 +1589,19 @@ module iota_oracle_tasks::oracle_tasks {
         0
     }
 
+    fun node_supports_scheduler_by_id(node_registry: &NodeRegistry, node_id: u64): bool {
+        let nodes_ref = systemState::oracle_nodes(node_registry);
+        let mut i = 0;
+        while (i < vector::length(nodes_ref)) {
+            let node = vector::borrow(nodes_ref, i);
+            if (systemState::oracle_node_id(node) == node_id) {
+                return systemState::oracle_node_accepts_template(node, SCHEDULER_TEMPLATE_ID)
+            };
+            i = i + 1;
+        };
+        false
+    }
+
     fun node_addr_by_id_or_zero(node_registry: &NodeRegistry, node_id: u64): address {
         let nodes_ref = systemState::oracle_nodes(node_registry);
         let mut i = 0;
@@ -1580,10 +1613,6 @@ module iota_oracle_tasks::oracle_tasks {
             i = i + 1;
         };
         @0x0
-    }
-
-    fun node_exists_by_id(node_registry: &NodeRegistry, node_id: u64): bool {
-        node_addr_by_id_or_zero(node_registry, node_id) != @0x0
     }
 
     fun contains_u64(values: &vector<u64>, target: u64): bool {

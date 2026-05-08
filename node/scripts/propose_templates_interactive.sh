@@ -94,16 +94,16 @@ source <(sed 's/\r$//' "$ENV_FILE")
 set +a
 
 if [[ -z "$NETWORK" ]]; then
-  NETWORK="${IOTA_NETWORK:-}"
+  NETWORK="${IOTA_NETWORK:-${ORACLE_NETWORK:-${NODE_NETWORK:-${NODE_1_NETWORK:-}}}}"
 fi
 NETWORK="$(echo "${NETWORK}" | tr '[:upper:]' '[:lower:]' | xargs)"
 case "$NETWORK" in
-  dev|local|localnet) NETWORK="devnet" ;;
+  dev|devent|local|localnet) NETWORK="devnet" ;;
   test) NETWORK="testnet" ;;
   main) NETWORK="mainnet" ;;
 esac
 [[ "$NETWORK" == "devnet" || "$NETWORK" == "testnet" || "$NETWORK" == "mainnet" ]] || {
-  echo "[error] invalid or missing network. Use --network devnet|testnet|mainnet or set IOTA_NETWORK in .env" >&2
+  echo "[error] invalid or missing network. Use --network devnet|testnet|mainnet or set IOTA_NETWORK/NODE_1_NETWORK in .env" >&2
   exit 1
 }
 
@@ -242,9 +242,14 @@ echo ""
 echo "Select templates to propose:"
 echo "  - type numbers separated by space/comma (example: 1 3 5)"
 echo "  - or type 'all'"
+echo "  - or type 'q' to quit"
 read -r -p "> " SELECTION
 
 SELECTION="$(echo "$SELECTION" | tr '[:upper:]' '[:lower:]' | xargs)"
+if [[ "$SELECTION" == "q" || "$SELECTION" == "quit" || "$SELECTION" == "exit" ]]; then
+  echo "[info] cancelled."
+  exit 0
+fi
 [[ -n "$SELECTION" ]] || { echo "[error] empty selection" >&2; exit 1; }
 
 SELECTED_FILES=()

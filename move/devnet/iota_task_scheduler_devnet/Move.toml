@@ -2,10 +2,10 @@
 name = "iota_oracle_scheduler"
 version = "0.0.1"
 edition = "2024.beta"
-published-at = "0xe10ce381189fecb51ae17d9fe1586599bcc5421e73045e8f9df1548357aadbfa"
+published-at = "0x5ab8afb6ac37a551506eac2db9c5a3c2e454c6fadbff0a550a523b12c6e24f51"
 
 [dependencies]
 iota_oracle_tasks = { local = "../oracle_tasks_devnet" }
 
 [addresses]
-iota_oracle_scheduler = "0xe10ce381189fecb51ae17d9fe1586599bcc5421e73045e8f9df1548357aadbfa"
+iota_oracle_scheduler = "0x5ab8afb6ac37a551506eac2db9c5a3c2e454c6fadbff0a550a523b12c6e24f51"

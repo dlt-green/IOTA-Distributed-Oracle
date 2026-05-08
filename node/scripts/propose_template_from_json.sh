@@ -143,10 +143,10 @@ if [[ -n "$ENV_FILE" ]]; then
   set +a
 fi
 
-NETWORK="$(echo "${NETWORK:-${IOTA_NETWORK:-}}" | tr '[:upper:]' '[:lower:]' | xargs)"
+NETWORK="$(echo "${NETWORK:-${IOTA_NETWORK:-${ORACLE_NETWORK:-${NODE_NETWORK:-${NODE_1_NETWORK:-}}}}}" | tr '[:upper:]' '[:lower:]' | xargs)"
 case "$NETWORK" in
   "") ;;
-  dev|local|localnet) NETWORK="devnet" ;;
+  dev|devent|local|localnet) NETWORK="devnet" ;;
   test) NETWORK="testnet" ;;
   main) NETWORK="mainnet" ;;
 esac

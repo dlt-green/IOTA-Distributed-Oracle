@@ -5,13 +5,14 @@ trap 'echo "[error] line $LINENO: command failed: $BASH_COMMAND" >&2' ERR
 
 ENV_FILE=""
 NODE_ID="${NODE_ID:-1}"
+NETWORK=""
 
 usage() {
   cat <<'EOF'
 Interactive approval for one pending template proposal.
 
 Usage:
-  ./scripts/approve_template_interactive.sh [--node <id>] [--env-file ./.env]
+  ./scripts/approve_template_interactive.sh [--node <id>] [--network devnet|testnet|mainnet] [--env-file ./.env]
 EOF
 }
 
@@ -26,6 +27,11 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || { echo "[error] missing value for --env-file" >&2; usage; exit 1; }
       ENV_FILE="$1"
+      ;;
+    --network)
+      shift
+      [[ $# -gt 0 ]] || { echo "[error] missing value for --network" >&2; usage; exit 1; }
+      NETWORK="$1"
       ;;
     -h|--help)
       usage
@@ -49,13 +55,50 @@ if [[ -z "$ENV_FILE" && -f "${PROJECT_DIR}/.env" ]]; then
   ENV_FILE="${PROJECT_DIR}/.env"
 fi
 if [[ -n "$ENV_FILE" ]]; then
+  for k in \
+    DEVNET_IOTA_RPC_URL DEVNET_IOTA_RPC_URLS DEVNET_IOTA_CLOCK_ID DEVNET_ORACLE_TASKS_PACKAGE_ID DEVNET_ORACLE_SYSTEM_PACKAGE_ID DEVNET_ORACLE_STATE_ID DEVNET_ORACLE_NODE_REGISTRY_ID DEVNET_CONTROLLER_CAP_ID DEVNET_CONTROLLER_ADDRESS_OR_ALIAS DEVNET_ORACLE_CONTROLLER_ADDRESS \
+    TESTNET_IOTA_RPC_URL TESTNET_IOTA_RPC_URLS TESTNET_IOTA_CLOCK_ID TESTNET_ORACLE_TASKS_PACKAGE_ID TESTNET_ORACLE_SYSTEM_PACKAGE_ID TESTNET_ORACLE_STATE_ID TESTNET_ORACLE_NODE_REGISTRY_ID TESTNET_CONTROLLER_CAP_ID TESTNET_CONTROLLER_ADDRESS_OR_ALIAS TESTNET_ORACLE_CONTROLLER_ADDRESS \
+    MAINNET_IOTA_RPC_URL MAINNET_IOTA_RPC_URLS MAINNET_IOTA_CLOCK_ID MAINNET_ORACLE_TASKS_PACKAGE_ID MAINNET_ORACLE_SYSTEM_PACKAGE_ID MAINNET_ORACLE_STATE_ID MAINNET_ORACLE_NODE_REGISTRY_ID MAINNET_CONTROLLER_CAP_ID MAINNET_CONTROLLER_ADDRESS_OR_ALIAS MAINNET_ORACLE_CONTROLLER_ADDRESS
+  do
+    unset "$k" || true
+  done
   set -a
   # shellcheck disable=SC1090
   source <(sed 's/\r$//' "$ENV_FILE")
   set +a
 fi
 
-JSON="$(cd "${PROJECT_DIR}" && npm exec -- tsx src/tools/listTemplates.ts --pending-only --json)"
+if [[ -z "$NETWORK" ]]; then
+  NETWORK="${IOTA_NETWORK:-${ORACLE_NETWORK:-${NODE_NETWORK:-${NODE_1_NETWORK:-}}}}"
+fi
+NETWORK="$(echo "${NETWORK}" | tr '[:upper:]' '[:lower:]' | xargs)"
+case "$NETWORK" in
+  dev|devent|local|localnet) NETWORK="devnet" ;;
+  test) NETWORK="testnet" ;;
+  main) NETWORK="mainnet" ;;
+esac
+[[ "$NETWORK" == "devnet" || "$NETWORK" == "testnet" || "$NETWORK" == "mainnet" ]] || {
+  echo "[error] invalid or missing network. Use --network devnet|testnet|mainnet or set IOTA_NETWORK/NODE_1_NETWORK in .env" >&2
+  exit 1
+}
+export IOTA_NETWORK="$NETWORK"
+
+NET_PREFIX="$(echo "$NETWORK" | tr '[:lower:]' '[:upper:]')"
+get_prefixed_env() {
+  local key="$1"
+  local prefixed="${NET_PREFIX}_${key}"
+  local v="${!prefixed:-}"
+  if [[ -n "$v" ]]; then
+    printf "%s" "$v"
+    return 0
+  fi
+  printf "%s" "${!key:-}"
+}
+
+STATE_ID="$(get_prefixed_env ORACLE_STATE_ID)"
+[[ -n "$STATE_ID" ]] || { echo "[error] missing ${NET_PREFIX}_ORACLE_STATE_ID (or ORACLE_STATE_ID) in env" >&2; exit 1; }
+
+JSON="$(cd "${PROJECT_DIR}" && npm exec -- tsx src/tools/listTemplates.ts --pending-only --json --network "$NETWORK" --state-id "$STATE_ID")"
 mapfile -t PENDING < <(printf "%s" "$JSON" | node -e '
 const fs = require("fs");
 const data = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -92,8 +135,13 @@ echo "Select proposals to approve:"
 echo "  - one index (example: 1)"
 echo "  - multiple indexes separated by space/comma (example: 1 3 5)"
 echo "  - or 'all'"
+echo "  - or 'q' to quit"
 read -r -p "> " SEL_RAW
 SEL_RAW="$(echo "$SEL_RAW" | tr '[:upper:]' '[:lower:]' | xargs)"
+if [[ "$SEL_RAW" == "q" || "$SEL_RAW" == "quit" || "$SEL_RAW" == "exit" ]]; then
+  echo "[info] cancelled."
+  exit 0
+fi
 [[ -n "$SEL_RAW" ]] || { echo "[error] empty selection" >&2; exit 1; }
 
 SELECTED_LINES=()
