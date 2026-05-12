@@ -21,12 +21,13 @@ Each section includes:
 ## 1) Prerequisites
 
 - Repository checked out and up to date.
-- Correct `.env` in `iota_oracle_node/`:
+- Correct `.env` in `node/`:
   - `IOTA_NETWORK`
   - `ORACLE_SYSTEM_PACKAGE_ID`
   - `ORACLE_TASKS_PACKAGE_ID`
   - `ORACLE_STATE_ID`
   - `CONTROLLER_CAP_ID` (owner is the admin/controller account)
+  - `ORACLE_VALIDATOR_CAPS_PACKAGE_ID` (package used to mint delegated caps, required where validator caps are split from the system package)
   - `DELEGATED_CONTROLLER_CAP_ID` (will be filled after mint)
 - Validator operation cap id (for minting delegated cap):
   - `UnverifiedValidatorOperationCap` id (example: `0xf21a...`)
@@ -39,7 +40,7 @@ Each section includes:
 
 ### 2.1 Local CLI version
 
-Run from `iota_oracle_node/`:
+Run from `node/`:
 
 ```bash
 bash ./scripts/create_delegated_controller_cap.sh \
@@ -182,6 +183,18 @@ Pending proposals:
 
 ```bash
 bash ./scripts/list_templates.sh --pending
+```
+
+Supported templates for the node:
+
+```bash
+bash ./scripts/update_supported_templates.sh --node 1
+```
+
+Non-interactive replacement:
+
+```bash
+bash ./scripts/update_supported_templates.sh --node 1 --templates 1,2,3,4,5,6,7,8 --yes
 ```
 
 ---

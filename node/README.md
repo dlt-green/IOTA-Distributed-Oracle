@@ -81,16 +81,15 @@ npm run cli -- set-accepted-templates --node 1 --templates 1,2,3,4,5,6,7,8
 ## Node manager scripts
 
 ```bash
-bash ./scripts/approve_template_by_id.sh --proposal-id 12 --node 1
-bash ./scripts/approve_template_by_id.sh --template-id 4 --node 1
+bash ./scripts/approve_template_interactive.sh --node 1
 bash ./scripts/propose_template_from_json.sh --file src/tasks/examples/task_STORAGE.json --controller 0xYOUR_CONTROLLER_ADDRESS
-bash ./scripts/update_supported_templates.sh --action add --template-id 7 --node 1
-bash ./scripts/update_supported_templates.sh --action remove --template-id 4 --node 1
+bash ./scripts/update_supported_templates.sh --node 1
+bash ./scripts/update_supported_templates.sh --node 1 --templates 1,2,3,4,5,6,7,8 --yes
 bash ./scripts/list_templates.sh
 bash ./scripts/list_templates.sh --pending
 ```
 
-`update_supported_templates.sh` also syncs `ORACLE_ACCEPTED_TEMPLATE_IDS` in `.env` after a successful on-chain update.
+`update_supported_templates.sh` replaces the node's full accepted-template list on-chain and syncs `NODE_<id>_ORACLE_ACCEPTED_TEMPLATE_IDS`, `ORACLE_ACCEPTED_TEMPLATE_IDS`, and the network-specific accepted-template key in `.env` after a successful update.
 
 ## STORAGE task behavior
 

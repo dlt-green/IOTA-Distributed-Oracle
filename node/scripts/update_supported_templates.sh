@@ -6,6 +6,8 @@ trap 'echo "[error] line $LINENO: command failed: $BASH_COMMAND" >&2' ERR
 NODE_ID="${NODE_ID:-1}"
 ENV_FILE=""
 TEMPLATES_RAW=""
+NETWORK=""
+ASSUME_YES=0
 
 usage() {
   cat <<'EOF'
@@ -13,13 +15,15 @@ Interactive update of node supported templates.
 The selected list replaces accepted_template_ids on-chain.
 
 Usage:
-  ./scripts/update_supported_templates.sh [--node <id>] [--env-file ./.env]
-  ./scripts/update_supported_templates.sh [--node <id>] --templates "4,5,6"
+  ./scripts/update_supported_templates.sh [--node <id>] [--network devnet|testnet|mainnet] [--env-file ./.env]
+  ./scripts/update_supported_templates.sh [--node <id>] [--network devnet|testnet|mainnet] --templates "4,5,6" [--yes]
 
 Options:
   --node <id>          Node id (default: 1)
+  --network <name>     Force network for env resolution (devnet|testnet|mainnet)
   --env-file <path>    Env file (default: ./ .env)
-  --templates <csv>    Non-interactive mode (example: "4,5,6")
+  --templates <csv>    Preselect templates (example: "4,5,6" or "all")
+  -y, --yes            Apply without confirmation
   -h, --help           Show help
 EOF
 }
@@ -36,10 +40,18 @@ while [[ $# -gt 0 ]]; do
       [[ $# -gt 0 ]] || { echo "[error] missing value for --env-file" >&2; usage; exit 1; }
       ENV_FILE="$1"
       ;;
+    --network)
+      shift
+      [[ $# -gt 0 ]] || { echo "[error] missing value for --network" >&2; usage; exit 1; }
+      NETWORK="$1"
+      ;;
     --templates)
       shift
       [[ $# -gt 0 ]] || { echo "[error] missing value for --templates" >&2; usage; exit 1; }
       TEMPLATES_RAW="$1"
+      ;;
+    -y|--yes)
+      ASSUME_YES=1
       ;;
     -h|--help)
       usage
@@ -118,30 +130,59 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_DIR}/.env}"
 
 if [[ -f "$ENV_FILE" ]]; then
+  for k in \
+    DEVNET_IOTA_RPC_URL DEVNET_IOTA_RPC_URLS DEVNET_IOTA_CLOCK_ID DEVNET_ORACLE_TASKS_PACKAGE_ID DEVNET_ORACLE_SYSTEM_PACKAGE_ID DEVNET_ORACLE_STATE_ID DEVNET_ORACLE_NODE_REGISTRY_ID DEVNET_CONTROLLER_CAP_ID DEVNET_CONTROLLER_ADDRESS_OR_ALIAS DEVNET_ORACLE_CONTROLLER_ADDRESS DEVNET_ORACLE_ACCEPTED_TEMPLATE_IDS \
+    TESTNET_IOTA_RPC_URL TESTNET_IOTA_RPC_URLS TESTNET_IOTA_CLOCK_ID TESTNET_ORACLE_TASKS_PACKAGE_ID TESTNET_ORACLE_SYSTEM_PACKAGE_ID TESTNET_ORACLE_STATE_ID TESTNET_ORACLE_NODE_REGISTRY_ID TESTNET_CONTROLLER_CAP_ID TESTNET_CONTROLLER_ADDRESS_OR_ALIAS TESTNET_ORACLE_CONTROLLER_ADDRESS TESTNET_ORACLE_ACCEPTED_TEMPLATE_IDS \
+    MAINNET_IOTA_RPC_URL MAINNET_IOTA_RPC_URLS MAINNET_IOTA_CLOCK_ID MAINNET_ORACLE_TASKS_PACKAGE_ID MAINNET_ORACLE_SYSTEM_PACKAGE_ID MAINNET_ORACLE_STATE_ID MAINNET_ORACLE_NODE_REGISTRY_ID MAINNET_CONTROLLER_CAP_ID MAINNET_CONTROLLER_ADDRESS_OR_ALIAS MAINNET_ORACLE_CONTROLLER_ADDRESS MAINNET_ORACLE_ACCEPTED_TEMPLATE_IDS
+  do
+    unset "$k" || true
+  done
   set -a
   # shellcheck disable=SC1090
   source <(sed 's/\r$//' "$ENV_FILE")
   set +a
 fi
 
-NETWORK_RAW="$(echo "${IOTA_NETWORK:-}" | tr '[:upper:]' '[:lower:]' | xargs)"
+NODE_NETWORK_KEY="NODE_${NODE_ID}_NETWORK"
+if [[ -z "$NETWORK" ]]; then
+  NETWORK="${IOTA_NETWORK:-${ORACLE_NETWORK:-${NODE_NETWORK:-${!NODE_NETWORK_KEY:-}}}}"
+fi
+NETWORK_RAW="$(echo "${NETWORK}" | tr '[:upper:]' '[:lower:]' | xargs)"
 case "$NETWORK_RAW" in
   dev|local|localnet) NETWORK_RAW="devnet" ;;
   test) NETWORK_RAW="testnet" ;;
   main) NETWORK_RAW="mainnet" ;;
 esac
+[[ "$NETWORK_RAW" == "devnet" || "$NETWORK_RAW" == "testnet" || "$NETWORK_RAW" == "mainnet" ]] || {
+  echo "[error] invalid or missing network. Use --network devnet|testnet|mainnet or set IOTA_NETWORK/NODE_${NODE_ID}_NETWORK in .env" >&2
+  exit 1
+}
+export IOTA_NETWORK="$NETWORK_RAW"
 NET_PREFIX="$(echo "$NETWORK_RAW" | tr '[:lower:]' '[:upper:]')"
-PREF_KEY=""
-if [[ -n "$NET_PREFIX" ]]; then
-  PREF_KEY="${NET_PREFIX}_ORACLE_ACCEPTED_TEMPLATE_IDS"
-fi
+PREF_KEY="${NET_PREFIX}_ORACLE_ACCEPTED_TEMPLATE_IDS"
+NODE_KEY="NODE_${NODE_ID}_ORACLE_ACCEPTED_TEMPLATE_IDS"
+
+get_prefixed_env() {
+  local key="$1"
+  local prefixed="${NET_PREFIX}_${key}"
+  local v="${!prefixed:-}"
+  if [[ -n "$v" ]]; then
+    printf "%s" "$v"
+    return 0
+  fi
+  printf "%s" "${!key:-}"
+}
+
+STATE_ID="$(get_prefixed_env ORACLE_STATE_ID)"
+[[ -n "$STATE_ID" ]] || { echo "[error] missing ${NET_PREFIX}_ORACLE_STATE_ID (or ORACLE_STATE_ID) in env" >&2; exit 1; }
 
 echo "[info] project: ${PROJECT_DIR}"
 echo "[info] node_id: ${NODE_ID}"
 echo "[info] env_file: ${ENV_FILE}"
-[[ -n "$NETWORK_RAW" ]] && echo "[info] network: ${NETWORK_RAW}"
+echo "[info] network: ${NETWORK_RAW}"
+echo "[info] state_id: ${STATE_ID}"
 
-JSON="$(cd "${PROJECT_DIR}" && npm exec -- tsx src/tools/listTemplates.ts --json)"
+JSON="$(cd "${PROJECT_DIR}" && npm exec -- tsx src/tools/listTemplates.ts --json --network "$NETWORK_RAW" --state-id "$STATE_ID")"
 mapfile -t CANDIDATES < <(printf "%s" "$JSON" | node -e '
 const fs = require("fs");
 const data = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -169,22 +210,45 @@ if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
   exit 1
 fi
 
-CURRENT_RAW="${ORACLE_ACCEPTED_TEMPLATE_IDS:-}"
-if [[ -z "$CURRENT_RAW" ]] && [[ -n "$PREF_KEY" ]]; then
+CURRENT_RAW="${!NODE_KEY:-}"
+if [[ -z "$CURRENT_RAW" ]]; then
+  CURRENT_RAW="${ORACLE_ACCEPTED_TEMPLATE_IDS:-}"
+fi
+if [[ -z "$CURRENT_RAW" ]]; then
   CURRENT_RAW="${!PREF_KEY:-}"
+fi
+if [[ -z "$CURRENT_RAW" ]]; then
+  CURRENT_RAW="$(read_env_value "$NODE_KEY" "$ENV_FILE" || true)"
 fi
 if [[ -z "$CURRENT_RAW" ]]; then
   CURRENT_RAW="$(read_env_value ORACLE_ACCEPTED_TEMPLATE_IDS "$ENV_FILE" || true)"
 fi
-if [[ -z "$CURRENT_RAW" && -n "$PREF_KEY" ]]; then
+if [[ -z "$CURRENT_RAW" ]]; then
   CURRENT_RAW="$(read_env_value "$PREF_KEY" "$ENV_FILE" || true)"
 fi
 CURRENT_LIST="$(normalize_list "$CURRENT_RAW")"
 
 SELECTED_LIST=""
 if [[ -n "$TEMPLATES_RAW" ]]; then
-  SELECTED_LIST="$(normalize_list "$TEMPLATES_RAW")"
+  TEMPLATES_CLEAN="$(echo "$TEMPLATES_RAW" | tr '[:upper:]' '[:lower:]' | xargs)"
+  if [[ "$TEMPLATES_CLEAN" == "all" ]]; then
+    SELECTED_IDS=()
+    for line in "${CANDIDATES[@]}"; do
+      SELECTED_IDS+=("$(printf "%s" "$line" | cut -f1)")
+    done
+    SELECTED_LIST="$(normalize_list "$(IFS=,; echo "${SELECTED_IDS[*]}")")"
+  else
+    SELECTED_LIST="$(normalize_list "$TEMPLATES_RAW")"
+  fi
   [[ -n "$SELECTED_LIST" ]] || { echo "[error] --templates produced empty list" >&2; exit 1; }
+  declare -A valid_ids=()
+  for line in "${CANDIDATES[@]}"; do
+    tid="$(printf "%s" "$line" | cut -f1)"
+    valid_ids["$tid"]=1
+  done
+  for token in ${SELECTED_LIST//,/ }; do
+    [[ -n "${valid_ids[$token]:-}" ]] || { echo "[error] unknown template id in --templates: $token" >&2; exit 1; }
+  done
 else
   echo ""
   echo "Available templates:"
@@ -236,22 +300,23 @@ fi
 echo ""
 echo "[info] current templates: ${CURRENT_LIST:-<none>}"
 echo "[info] selected templates: ${SELECTED_LIST}"
-read -r -p "Apply this template support list now? [y/N] " CONFIRM
-CONFIRM="$(echo "$CONFIRM" | tr '[:upper:]' '[:lower:]' | xargs)"
-if [[ "$CONFIRM" != "y" && "$CONFIRM" != "yes" ]]; then
-  echo "[info] cancelled."
-  exit 0
+if [[ "$ASSUME_YES" -ne 1 ]]; then
+  read -r -p "Apply this template support list now? [y/N] " CONFIRM
+  CONFIRM="$(echo "$CONFIRM" | tr '[:upper:]' '[:lower:]' | xargs)"
+  if [[ "$CONFIRM" != "y" && "$CONFIRM" != "yes" ]]; then
+    echo "[info] cancelled."
+    exit 0
+  fi
 fi
 
 cd "${PROJECT_DIR}"
 npm run cli -- set-accepted-templates --node "${NODE_ID}" --templates "${SELECTED_LIST}"
 
 if [[ -n "$ENV_FILE" ]]; then
+  write_env_value "$NODE_KEY" "${SELECTED_LIST}" "${ENV_FILE}"
   write_env_value "ORACLE_ACCEPTED_TEMPLATE_IDS" "${SELECTED_LIST}" "${ENV_FILE}"
-  if [[ -n "$PREF_KEY" ]]; then
-    write_env_value "$PREF_KEY" "${SELECTED_LIST}" "${ENV_FILE}"
-  fi
-  echo "[info] updated env: ORACLE_ACCEPTED_TEMPLATE_IDS${PREF_KEY:+ and ${PREF_KEY}}"
+  write_env_value "$PREF_KEY" "${SELECTED_LIST}" "${ENV_FILE}"
+  echo "[info] updated env: ${NODE_KEY}, ORACLE_ACCEPTED_TEMPLATE_IDS and ${PREF_KEY}"
 fi
 
 echo "[ok] node ${NODE_ID} accepted templates updated."

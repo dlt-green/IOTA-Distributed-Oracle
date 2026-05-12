@@ -80,23 +80,17 @@ This **replaces** `accepted_template_ids` on-chain.
 ### Approve proposal by id/template
 
 ```bash
-bash ./scripts/approve_template_by_id.sh --template-id 4 --node 1
-bash ./scripts/approve_template_by_id.sh --proposal-id 12 --node 1
+bash ./scripts/approve_template_interactive.sh --node 1
 ```
 
-### Add template to node supported list
+### Update node supported templates
 
 ```bash
-bash ./scripts/update_supported_templates.sh --action add --template-id 7 --node 1
+bash ./scripts/update_supported_templates.sh --node 1
+bash ./scripts/update_supported_templates.sh --node 1 --templates 1,2,3,4,5,6,7,8 --yes
 ```
 
-### Remove template from node supported list
-
-```bash
-bash ./scripts/update_supported_templates.sh --action remove --template-id 4 --node 1
-```
-
-`update_supported_templates.sh` computes a final list, calls `set-accepted-templates`, and updates `ORACLE_ACCEPTED_TEMPLATE_IDS` in `.env` (default `./.env`, override with `--env-file`).
+`update_supported_templates.sh` computes a replacement list, calls `set-accepted-templates`, and updates `NODE_<id>_ORACLE_ACCEPTED_TEMPLATE_IDS`, `ORACLE_ACCEPTED_TEMPLATE_IDS`, and the network-specific accepted-template key in `.env` (default `./.env`, override with `--env-file`).
 
 ### List approved templates (and pending approvals)
 
