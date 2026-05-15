@@ -10,7 +10,7 @@ SKIP_ENV=0
 SKIP_LOCAL_BUILD=0
 SKIP_DOCKER=0
 INCLUDE_WEBVIEW=1
-INCLUDE_TRAEFIK=1
+INCLUDE_TRAEFIK=0
 DEVNET_COMPOSE=0
 
 usage() {
@@ -28,7 +28,7 @@ Options:
   --skip-local-build            Do not run npm ci / npm build locally
   --skip-docker                 Do not rebuild/restart Docker services
   --no-webview                  Do not update the webview Docker service
-  --no-traefik                  Do not update the traefik Docker service
+  --with-traefik                Also update the traefik Docker service
   -h, --help                    Show this help
 EOF
 }
@@ -157,6 +157,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-webview)
       INCLUDE_WEBVIEW=0
+      shift
+      ;;
+    --with-traefik)
+      INCLUDE_TRAEFIK=1
       shift
       ;;
     --no-traefik)
