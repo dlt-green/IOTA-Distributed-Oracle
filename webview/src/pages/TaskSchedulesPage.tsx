@@ -17,6 +17,7 @@ type Props = {
   activeNetwork: OracleNetwork;
   tasksPackageId: string | null;
   systemPackageId: string | null;
+  readyToLoad: boolean;
   onSelectTask?: (taskId: string) => void;
 };
 
@@ -248,6 +249,7 @@ export default function TaskSchedulesPage({
   activeNetwork,
   tasksPackageId,
   systemPackageId,
+  readyToLoad,
   onSelectTask,
 }: Props) {
   const [data, setData] = useState<TaskSchedulesResponse | null>(null);
@@ -293,6 +295,15 @@ export default function TaskSchedulesPage({
   useEffect(() => {
     let cancelled = false;
 
+    if (!readyToLoad) {
+      setData(null);
+      setError(null);
+      setLoading(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const load = async (withLoading = false) => {
       if (withLoading) setLoading(true);
       try {
@@ -317,7 +328,7 @@ export default function TaskSchedulesPage({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeNetwork, refreshNonce]);
+  }, [activeNetwork, readyToLoad, refreshNonce]);
 
   useEffect(() => {
     let cancelled = false;

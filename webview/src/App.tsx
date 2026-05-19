@@ -692,12 +692,13 @@ export default function App() {
           </section>
         </>
       ) : pageMode === "monitoring" ? (
-        <MonitoringPage activeNetwork={activeNetwork} status={status} />
+        <MonitoringPage activeNetwork={activeNetwork} status={status} readyToLoad={networkConfigLoaded} />
       ) : pageMode === "scheduled" ? (
         <TaskSchedulesPage
           activeNetwork={activeNetwork}
           tasksPackageId={status?.tasksPackageId ?? null}
           systemPackageId={status?.systemPackageId ?? null}
+          readyToLoad={networkConfigLoaded}
           onSelectTask={(taskId) => {
             setSelectedValidateTaskId(taskId);
             setPageMode("validate");

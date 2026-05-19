@@ -16,6 +16,7 @@ import type {
 type Props = {
   activeNetwork: OracleNetwork;
   status: OracleStatus | null;
+  readyToLoad: boolean;
 };
 
 const REFRESH_MS = 10_000;
@@ -71,13 +72,22 @@ function delegatingNodeAddress(node: RegisteredOracleNode | null | undefined): s
   return node?.address ? shortAddress(node.address) : "-";
 }
 
-export default function MonitoringPage({ activeNetwork, status }: Props) {
+export default function MonitoringPage({ activeNetwork, status, readyToLoad }: Props) {
   const [schedules, setSchedules] = useState<TaskSchedulesResponse | null>(null);
   const [loadingSchedules, setLoadingSchedules] = useState(true);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    if (!readyToLoad) {
+      setSchedules(null);
+      setScheduleError(null);
+      setLoadingSchedules(true);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function load(withLoading = false) {
       if (withLoading) setLoadingSchedules(true);
@@ -103,7 +113,7 @@ export default function MonitoringPage({ activeNetwork, status }: Props) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeNetwork]);
+  }, [activeNetwork, readyToLoad]);
 
   const activityByAddress = useMemo(() => {
     const map = new Map<string, NodeActivity>();
