@@ -65,6 +65,7 @@ export type OracleStatus = {
   mode: "live" | "degraded";
   network: string;
   rpcUrl: string;
+  graphqlUrl: string | null;
   packageId: string | null;
   tasksPackageId: string | null;
   systemPackageId: string | null;
@@ -216,6 +217,7 @@ export type NetworkConfigResponse = {
   activeNetwork: OracleNetwork;
   supportedNetworks: OracleNetwork[];
   rpcUrl: string;
+  graphqlUrl: string | null;
   tasksPackageId: string | null;
   systemPackageId: string | null;
   stateId: string | null;

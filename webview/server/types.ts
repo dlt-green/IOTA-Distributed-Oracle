@@ -63,6 +63,7 @@ export type OracleStatusResponse = {
   mode: "live" | "degraded";
   network: string;
   rpcUrl: string;
+  graphqlUrl: string | null;
   packageId: string | null;
   tasksPackageId: string | null;
   systemPackageId: string | null;

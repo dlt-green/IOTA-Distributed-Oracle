@@ -109,14 +109,6 @@ async function readTaskSchedule(client: IotaClient, id: string): Promise<TaskSch
   };
 }
 
-function getGraphqlEndpoint(network: string | undefined): string | null {
-  const normalized = String(network ?? "").trim().toLowerCase();
-  if (normalized === "mainnet") return "https://graphql.mainnet.iota.cafe";
-  if (normalized === "testnet") return "https://graphql.testnet.iota.cafe";
-  if (normalized === "devnet") return "https://graphql.devnet.iota.cafe";
-  return null;
-}
-
 async function fetchGraphqlPayload<T>(
   graphqlUrl: string,
   query: string,
@@ -139,14 +131,15 @@ async function fetchGraphqlPayload<T>(
 }
 
 async function listTaskObjectIds(
-  network: string | undefined,
+  graphqlUrl: string,
   packageId: string | null,
   warnings: string[],
 ): Promise<string[]> {
   if (!packageId) return [];
-
-  const graphqlUrl = getGraphqlEndpoint(network);
-  if (!graphqlUrl) return [];
+  if (!graphqlUrl) {
+    warnings.push("Missing IOTA_GRAPHQL_URL for active network. Scheduled task discovery is running in degraded mode.");
+    return [];
+  }
 
   const structType = `${packageId}::oracle_tasks::Task`;
   const query = `
@@ -241,7 +234,7 @@ export async function getTaskSchedules(network?: string): Promise<TaskSchedulesR
     }
   }
 
-  for (const id of await listTaskObjectIds(runtime.network, tasksPackageId, warnings)) {
+  for (const id of await listTaskObjectIds(runtime.graphqlUrl, tasksPackageId, warnings)) {
     taskIds.add(normalizeAddress(id));
   }
 

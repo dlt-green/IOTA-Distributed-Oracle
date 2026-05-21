@@ -460,15 +460,6 @@ async function queryModuleEvents(
   return (page.data ?? []).map((event) => normalizeEvent(moduleName, event as RpcEvent));
 }
 
-function getGraphqlEndpoint(network: string | undefined): string | null {
-  const normalized = String(network ?? "").trim().toLowerCase();
-  if (normalized === "mainnet") return "https://graphql.mainnet.iota.cafe";
-  if (normalized === "testnet") return "https://graphql.testnet.iota.cafe";
-  if (normalized === "devnet") return "https://graphql.devnet.iota.cafe";
-  if (normalized === "localnet") return "http://127.0.0.1:8000";
-  return null;
-}
-
 async function fetchGraphqlPayload<T>(
   graphqlUrl: string,
   query: string,
@@ -491,14 +482,15 @@ async function fetchGraphqlPayload<T>(
 }
 
 async function countOnChainTaskObjects(
-  network: string | undefined,
+  graphqlUrl: string,
   packageId: string,
   warnings: string[],
 ): Promise<number | null> {
   if (!packageId) return null;
-
-  const graphqlUrl = getGraphqlEndpoint(network);
-  if (!graphqlUrl) return null;
+  if (!graphqlUrl) {
+    warnings.push("Missing IOTA_GRAPHQL_URL for active network. GraphQL-backed task object count is unavailable.");
+    return null;
+  }
 
   const structType = `${packageId}::oracle_tasks::Task`;
   const cacheKey = `${graphqlUrl}|${structType}`;
@@ -598,14 +590,15 @@ async function countModuleEventsViaGraphql(
 }
 
 async function countTotalOracleEvents(
-  network: string | undefined,
+  graphqlUrl: string,
   packageId: string,
   warnings: string[],
 ): Promise<number | null> {
   if (!packageId) return null;
-
-  const graphqlUrl = getGraphqlEndpoint(network);
-  if (!graphqlUrl) return null;
+  if (!graphqlUrl) {
+    warnings.push("Missing IOTA_GRAPHQL_URL for active network. GraphQL-backed event count is unavailable.");
+    return null;
+  }
 
   const cacheKey = `${graphqlUrl}|${packageId}|oracle-events`;
   const cached = totalOracleEventsCache.get(cacheKey);
@@ -1000,14 +993,15 @@ export async function getOracleStatus(network?: string): Promise<OracleStatusRes
   const activeNodes = nodeActivity.filter((node) => node.active).length;
   const knownNodes = effectiveRegisteredNodes.length > 0 ? effectiveRegisteredNodes.length : null;
   const inactiveKnownNodes = knownNodes == null ? null : knownNodes - activeNodes;
-  const onChainTaskObjects = await countOnChainTaskObjects(runtime.network, runtime.oracleTasksPackageId, warnings);
-  const totalOracleEvents = await countTotalOracleEvents(runtime.network, runtime.oracleTasksPackageId, warnings);
+  const onChainTaskObjects = await countOnChainTaskObjects(runtime.graphqlUrl, runtime.oracleTasksPackageId, warnings);
+  const totalOracleEvents = await countTotalOracleEvents(runtime.graphqlUrl, runtime.oracleTasksPackageId, warnings);
 
   return {
     ok: true,
     mode: runtime.oracleTasksPackageId ? "live" : "degraded",
     network: runtime.network || "unknown",
     rpcUrl: runtime.rpcUrl,
+    graphqlUrl: runtime.graphqlUrl || null,
     packageId: runtime.oracleTasksPackageId || null,
     tasksPackageId: runtime.oracleTasksPackageId || null,
     systemPackageId: runtime.oracleSystemPackageId || null,

@@ -74,6 +74,7 @@ export function getRuntimeConfig(network = activeNetwork) {
     return {
         network: selected,
         rpcUrl: pickNetworkValue(selected, "IOTA_RPC_URL", "https://api.mainnet.iota.cafe"),
+        graphqlUrl: pickNetworkValue(selected, "IOTA_GRAPHQL_URL"),
         oracleTasksPackageId: pickNetworkValue(selected, "ORACLE_TASKS_PACKAGE_ID"),
         oracleSystemPackageId: pickNetworkValue(selected, "ORACLE_SYSTEM_PACKAGE_ID"),
         oracleStateId: pickNetworkValue(selected, "ORACLE_STATE_ID", pickNetworkValue(selected, "ORACLE_SYSTEM_STATE_ID", pickNetworkValue(selected, "ORACLE_STATUS_ID"))),
@@ -100,5 +101,6 @@ export const envDebug = {
         process.env.ORACLE_SYSTEM_PACKAGE_ID ||
         process.env.ORACLE_PACKAGE_ID ||
         process.env.IOTA_RPC_URL ||
+        process.env.IOTA_GRAPHQL_URL ||
         process.env.PORT),
 };
