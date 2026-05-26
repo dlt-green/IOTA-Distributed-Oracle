@@ -77,9 +77,20 @@ type TaskObjectCountCacheEntry = {
 };
 
 const TASK_OBJECT_COUNT_CACHE_TTL_MS = 30_000;
+const TRANSIENT_GRAPHQL_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const EXECUTION_MESSAGE_KINDS = new Set([2, 3, 4, 7]);
 const taskObjectCountCache = new Map<string, TaskObjectCountCacheEntry>();
 const totalOracleEventsCache = new Map<string, TaskObjectCountCacheEntry>();
+
+class GraphqlHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`GraphQL request failed: HTTP ${status}`);
+  }
+}
+
+function isTransientGraphqlError(error: unknown): boolean {
+  return error instanceof GraphqlHttpError && TRANSIENT_GRAPHQL_STATUS_CODES.has(error.status);
+}
 
 function normalizeAddress(value: string): string {
   const t = String(value ?? "").trim().toLowerCase();
@@ -475,7 +486,7 @@ async function fetchGraphqlPayload<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`GraphQL request failed: HTTP ${response.status}`);
+    throw new GraphqlHttpError(response.status);
   }
 
   return (await response.json()) as T;
@@ -537,6 +548,13 @@ async function countOnChainTaskObjects(
       if (!cursor) break;
     }
   } catch (error) {
+    if (cached?.value != null && isTransientGraphqlError(error)) {
+      return cached.value;
+    }
+    if (isTransientGraphqlError(error)) {
+      taskObjectCountCache.set(cacheKey, { value: null, fetchedAtMs: now });
+      return null;
+    }
     warnings.push(`Unable to count on-chain task objects: ${String(error)}`);
     taskObjectCountCache.set(cacheKey, { value: null, fetchedAtMs: now });
     return null;
@@ -616,6 +634,13 @@ async function countTotalOracleEvents(
     totalOracleEventsCache.set(cacheKey, { value: total, fetchedAtMs: now });
     return total;
   } catch (error) {
+    if (cached?.value != null && isTransientGraphqlError(error)) {
+      return cached.value;
+    }
+    if (isTransientGraphqlError(error)) {
+      totalOracleEventsCache.set(cacheKey, { value: null, fetchedAtMs: now });
+      return null;
+    }
     warnings.push(`Unable to count total oracle events: ${String(error)}`);
     totalOracleEventsCache.set(cacheKey, { value: null, fetchedAtMs: now });
     return null;

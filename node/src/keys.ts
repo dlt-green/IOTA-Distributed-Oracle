@@ -14,6 +14,24 @@ export type NodeIdentity = {
   publicKeyBytes: Uint8Array;
 };
 
+function keypairFromSecretKey(secretKeyBech32: string, source: string): Ed25519Keypair {
+  const parsed = decodeIotaPrivateKey(secretKeyBech32);
+  if (parsed.schema !== 'ED25519') {
+    throw new Error(`Unsupported key schema in ${source}: ${parsed.schema}`);
+  }
+  return Ed25519Keypair.fromSecretKey(parsed.secretKey);
+}
+
+function envPrivateKeyForNode(nodeId: string): string | undefined {
+  const nodeScoped = process.env[`NODE_${nodeId}_PRIVATEKEY`]?.trim();
+  if (nodeScoped) return nodeScoped;
+
+  const currentNode = process.env.PRIVATEKEY?.trim();
+  if (currentNode) return currentNode;
+
+  return undefined;
+}
+
 export function loadOrCreateNodeIdentity(nodeId: string): NodeIdentity {
   const dir = path.resolve(process.cwd(), 'keys');
   fs.mkdirSync(dir, { recursive: true });
@@ -25,11 +43,9 @@ export function loadOrCreateNodeIdentity(nodeId: string): NodeIdentity {
 
   if (fs.existsSync(fp)) {
     secretKeyBech32 = fs.readFileSync(fp, 'utf8').trim();
-    const parsed = decodeIotaPrivateKey(secretKeyBech32);
-    if (parsed.schema !== 'ED25519') {
-      throw new Error(`Unsupported key schema in ${fp}: ${parsed.schema}`);
-    }
-    keypair = Ed25519Keypair.fromSecretKey(parsed.secretKey);
+    keypair = keypairFromSecretKey(secretKeyBech32, fp);
+  } else if ((secretKeyBech32 = envPrivateKeyForNode(nodeId) ?? "")) {
+    keypair = keypairFromSecretKey(secretKeyBech32, `NODE_${nodeId}_PRIVATEKEY / PRIVATEKEY`);
   } else {
     keypair = new Ed25519Keypair();
     secretKeyBech32 = keypair.getSecretKey();

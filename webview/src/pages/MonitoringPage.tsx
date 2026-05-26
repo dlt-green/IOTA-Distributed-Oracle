@@ -156,8 +156,8 @@ export default function MonitoringPage({ activeNetwork, status, readyToLoad }: P
           hint={`Window: ${status?.activeWindowMinutes ?? "-"} min`}
         />
         <MetricCard label="Registered nodes" value={statusLoaded ? registeredNodes.length : "-"} hint="On-chain registry" />
-        <MetricCard label="Scheduled tasks" value={schedules?.items.length ?? "-"} hint="Scheduler registry" />
-        <MetricCard label="Task objects" value={status?.metrics.onChainTaskObjects ?? "-"} hint="On-chain" />
+        <MetricCard label="Live scheduled tasks" value={schedules?.items.length ?? "-"} hint="Task registry" />
+        <MetricCard label="Task objects" value={status?.metrics.onChainTaskObjects ?? "-"} hint="All on-chain" />
         <MetricCard label="Oracle events" value={status?.metrics.totalOracleEvents ?? "-"} hint="Total indexed" />
       </section>
 
