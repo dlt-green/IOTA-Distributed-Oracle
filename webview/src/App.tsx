@@ -38,6 +38,23 @@ function taskIdFromPath(pathname: string): string {
   }
 }
 
+function taskIdFromSearch(search: string): string {
+  const params = new URLSearchParams(search);
+  const rawTaskId = params.get("taskid") ?? params.get("taskId") ?? params.get("task_id");
+  if (!rawTaskId) return "";
+  return rawTaskId.trim();
+}
+
+function taskIdFromUrl(location: Location): string {
+  return taskIdFromSearch(location.search) || taskIdFromPath(location.pathname);
+}
+
+function networkFromSearch(search: string): OracleNetwork | null {
+  const params = new URLSearchParams(search);
+  const rawNetwork = params.get("network");
+  return rawNetwork ? normalizeNetwork(rawNetwork) : null;
+}
+
 function taskPath(taskId: string): string {
   return `/task/${encodeURIComponent(taskId.trim())}`;
 }
@@ -223,7 +240,8 @@ function readableTextForBackground(background: string | null | undefined, dark =
 }
 
 export default function App() {
-  const initialRouteTaskId = taskIdFromPath(window.location.pathname);
+  const initialRouteTaskId = taskIdFromUrl(window.location);
+  const initialRouteNetwork = networkFromSearch(window.location.search) ?? "mainnet";
   const [status, setStatus] = useState<OracleStatus | null>(null);
   const [examples, setExamples] = useState<ExampleTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,11 +253,11 @@ export default function App() {
   const [pageMode, setPageMode] = useState<PageMode>(initialRouteTaskId ? "validate" : "monitoring");
   const [menuOpen, setMenuOpen] = useState(false);
   const [supportedNetworks, setSupportedNetworks] = useState<OracleNetwork[]>(FALLBACK_NETWORKS);
-  const [activeNetwork, setActiveNetworkState] = useState<OracleNetwork>("mainnet");
+  const [activeNetwork, setActiveNetworkState] = useState<OracleNetwork>(initialRouteNetwork);
   const [networkLoading, setNetworkLoading] = useState(false);
   const [networkConfigLoaded, setNetworkConfigLoaded] = useState(false);
   const [iotaMarketPrice, setIotaMarketPrice] = useState<IotaMarketPriceResponse | null>(null);
-  const activeNetworkRef = useRef<OracleNetwork>("mainnet");
+  const activeNetworkRef = useRef<OracleNetwork>(initialRouteNetwork);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const hostingText = import.meta.env.VITE_HOSTING_TEXT?.trim() || "";
   const inputBackground = import.meta.env.VITE_THEME_INPUT_BG?.trim() || "#0f1730";
@@ -300,8 +318,13 @@ export default function App() {
         const supported = (
           networkConfig.supportedNetworks?.length ? networkConfig.supportedNetworks : FALLBACK_NETWORKS
         ).map((item) => normalizeNetwork(item));
-        setSupportedNetworks(Array.from(new Set(supported)));
-        const normalizedNetwork = normalizeNetwork(networkConfig.activeNetwork);
+        const uniqueSupported = Array.from(new Set(supported));
+        setSupportedNetworks(uniqueSupported);
+        const normalizedNetwork = uniqueSupported.includes(initialRouteNetwork)
+          ? initialRouteNetwork
+          : uniqueSupported.includes("mainnet")
+            ? "mainnet"
+            : uniqueSupported[0] ?? "mainnet";
         activeNetworkRef.current = normalizedNetwork;
         setActiveNetworkState(normalizedNetwork);
       } catch (err) {
@@ -349,7 +372,13 @@ export default function App() {
 
   useEffect(() => {
     function syncRouteTask() {
-      const routeTaskId = taskIdFromPath(window.location.pathname);
+      const routeNetwork = networkFromSearch(window.location.search);
+      if (routeNetwork) {
+        activeNetworkRef.current = routeNetwork;
+        setActiveNetworkState(routeNetwork);
+      }
+
+      const routeTaskId = taskIdFromUrl(window.location);
       if (!routeTaskId) return;
       setSelectedValidateTaskId(routeTaskId);
       setPageMode("validate");
