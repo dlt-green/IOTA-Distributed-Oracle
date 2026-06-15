@@ -219,8 +219,8 @@ async function main() {
       lastStartedAtMs: null,
       lastCompletedAtMs: null,
       checks: {
-        LLM: emptyCapabilityCheck(optBool("LLM_HEALTH_CHECK_ENABLED", true)),
-        IPFS: emptyCapabilityCheck(optBool("IPFS_HEALTH_CHECK_ENABLED", true)),
+        LLM: emptyCapabilityCheck(true),
+        IPFS: emptyCapabilityCheck(true),
       },
     },
   };

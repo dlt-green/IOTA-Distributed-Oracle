@@ -13,18 +13,17 @@ Oracle nodes now run periodic local checks for:
 The checks are started by the node daemon after boot and run periodically while
 the node is active.
 
-Default configuration:
+The health policy is fixed in the node runtime and is not exposed through
+environment variables. Standard node operators cannot disable the LLM or IPFS
+checks from `.env`.
 
-```env
-TEMPLATE_HEALTH_WORKER_ENABLED=true
-TEMPLATE_HEALTH_INITIAL_DELAY_MS=30000
-TEMPLATE_HEALTH_INTERVAL_MS=300000
+Built-in policy:
 
-LLM_HEALTH_CHECK_ENABLED=true
-LLM_HEALTH_TIMEOUT_MS=20000
-
-IPFS_HEALTH_CHECK_ENABLED=true
-```
+- initial delay: 30 seconds after worker startup;
+- interval: 5 minutes;
+- LLM health request timeout: 20 seconds;
+- LLM check: always enabled;
+- IPFS check: always enabled.
 
 ## Automatic template support removal
 

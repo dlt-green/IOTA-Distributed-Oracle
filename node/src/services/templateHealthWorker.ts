@@ -5,7 +5,6 @@ import type { IotaClient } from "@iota/iota-sdk/client";
 
 import { getStateId } from "../config/env";
 import type { NodeContext } from "../nodeContext";
-import { optBool, optInt } from "../nodeConfig";
 import { registerOracleNode } from "../oracleTx";
 import { getIpfsConfig, uploadBytesToIpfs, deleteCidFromIpfs } from "../ipfs";
 import { callLlmJson } from "../tasks/utils/llm";
@@ -26,6 +25,10 @@ type TemplateRemovalResult = {
   removed: number[];
   txDigest: string | null;
 };
+
+const BUILT_IN_HEALTH_INITIAL_DELAY_MS = 30_000;
+const BUILT_IN_HEALTH_INTERVAL_MS = 5 * 60_000;
+const BUILT_IN_LLM_PROBE_TIMEOUT_MS = 20_000;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -144,7 +147,7 @@ async function testLlmConfig(): Promise<void> {
       temperature: 0,
       top_p: 1,
       max_output_tokens: 32,
-      timeoutMs: optInt("LLM_HEALTH_TIMEOUT_MS", 20_000),
+      timeoutMs: BUILT_IN_LLM_PROBE_TIMEOUT_MS,
     },
     normalization: { canonical: true, dropNulls: false, sortArrays: false },
   });
@@ -203,9 +206,9 @@ async function removeTemplateSupport(
 }
 
 async function runTemplateHealthCheck(ctx: NodeContext, healthState: CapabilityHealthRuntimeState): Promise<void> {
-  const checks: Array<{ name: CapabilityName; enabled: boolean; run: () => Promise<void> }> = [
-    { name: "LLM", enabled: optBool("LLM_HEALTH_CHECK_ENABLED", true), run: testLlmConfig },
-    { name: "IPFS", enabled: optBool("IPFS_HEALTH_CHECK_ENABLED", true), run: testIpfsConfig },
+  const checks: Array<{ name: CapabilityName; run: () => Promise<void> }> = [
+    { name: "LLM", run: testLlmConfig },
+    { name: "IPFS", run: testIpfsConfig },
   ];
 
   healthState.running = true;
@@ -213,12 +216,7 @@ async function runTemplateHealthCheck(ctx: NodeContext, healthState: CapabilityH
 
   for (const check of checks) {
     const checkState = healthState.checks[check.name];
-    checkState.enabled = check.enabled;
-
-    if (!check.enabled) {
-      checkState.status = "disabled";
-      continue;
-    }
+    checkState.enabled = true;
 
     const startedAtMs = Date.now();
     checkState.status = "running";
@@ -263,16 +261,8 @@ async function runTemplateHealthCheck(ctx: NodeContext, healthState: CapabilityH
 }
 
 export function startTemplateHealthWorker(ctx: NodeContext, healthState: CapabilityHealthRuntimeState): void {
-  if (!optBool("TEMPLATE_HEALTH_WORKER_ENABLED", true)) {
-    healthState.workerEnabled = false;
-    healthState.checks.LLM.status = "disabled";
-    healthState.checks.IPFS.status = "disabled";
-    console.log(`[template-health] worker disabled`);
-    return;
-  }
-
-  const intervalMs = Math.max(60_000, optInt("TEMPLATE_HEALTH_INTERVAL_MS", 5 * 60_000));
-  const initialDelayMs = Math.max(0, optInt("TEMPLATE_HEALTH_INITIAL_DELAY_MS", 30_000));
+  const intervalMs = BUILT_IN_HEALTH_INTERVAL_MS;
+  const initialDelayMs = BUILT_IN_HEALTH_INITIAL_DELAY_MS;
   let running = false;
   healthState.workerEnabled = true;
   healthState.intervalMs = intervalMs;
