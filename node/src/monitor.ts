@@ -8,6 +8,34 @@ import type { NodeContext } from "./nodeContext";
 const DEFAULT_MONITOR_HOST = "0.0.0.0";
 const DEFAULT_MONITOR_PORT = 9080;
 
+export type CapabilityHealthStatus = "disabled" | "pending" | "running" | "ok" | "failed";
+
+export type CapabilityHealthCheckState = {
+  enabled: boolean;
+  status: CapabilityHealthStatus;
+  lastStartedAtMs: number | null;
+  lastCheckedAtMs: number | null;
+  lastOkAtMs: number | null;
+  lastErrorAtMs: number | null;
+  lastError: string | null;
+  templatesRemoved: number[];
+  lastRemovalTxDigest: string | null;
+  lastRemovalError: string | null;
+};
+
+export type CapabilityHealthRuntimeState = {
+  workerEnabled: boolean;
+  intervalMs: number | null;
+  initialDelayMs: number | null;
+  running: boolean;
+  lastStartedAtMs: number | null;
+  lastCompletedAtMs: number | null;
+  checks: {
+    LLM: CapabilityHealthCheckState;
+    IPFS: CapabilityHealthCheckState;
+  };
+};
+
 export type MonitorRuntimeState = {
   booting: boolean;
   listenersStarted: boolean;
@@ -20,6 +48,7 @@ export type MonitorRuntimeState = {
     txDigest: string | null;
     lastError: string | null;
   };
+  capabilityHealth: CapabilityHealthRuntimeState;
 };
 
 function resolveMonitorHost(): string {
@@ -59,10 +88,15 @@ export function startMonitorServer(ctx: NodeContext, state: MonitorRuntimeState)
       const uptimeMs = Date.now() - ctx.startupMs;
       const taskStats = ctx.stats.getTaskStats();
       const balance = await ctx.stats.getBalanceSnapshot(ctx.client, ctx.identity.address);
+      const capabilitiesDegraded = Object.values(state.capabilityHealth.checks).some(
+        (check) => check.enabled && check.status === "failed",
+      );
       const body = {
         status: state.booting ? "booting" : "ok",
         nodeId: ctx.nodeId,
         address: ctx.identity.address,
+        capabilitiesDegraded,
+        capabilityHealth: state.capabilityHealth,
         acceptedTemplateIds: ctx.acceptedTemplateIds,
         acceptedTemplateIdsSource: "on-chain",
         persistedAcceptedTemplateIdsFallback: ctx.acceptedTemplateIds,

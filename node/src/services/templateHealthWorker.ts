@@ -12,11 +12,19 @@ import { callLlmJson } from "../tasks/utils/llm";
 import { readRegisteredOracleNodeByAddr } from "./schedulerReader";
 import { getAnyMoveFields, getMoveFields } from "../utils/move";
 import { sleep } from "../utils/sleep";
+import type { CapabilityHealthRuntimeState } from "../monitor";
 
 type TaskTemplateSummary = {
   templateId: number;
   taskType: string;
   allowStorage: boolean;
+};
+
+type CapabilityName = "LLM" | "IPFS";
+
+type TemplateRemovalResult = {
+  removed: number[];
+  txDigest: string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -157,7 +165,11 @@ async function testIpfsConfig(): Promise<void> {
   });
 }
 
-async function removeTemplateSupport(ctx: NodeContext, reason: "LLM" | "IPFS", failedError: string): Promise<void> {
+async function removeTemplateSupport(
+  ctx: NodeContext,
+  reason: CapabilityName,
+  failedError: string,
+): Promise<TemplateRemovalResult> {
   const currentNode = await readRegisteredOracleNodeByAddr(ctx.client, ctx.myAddr);
   const accepted = currentNode?.acceptedTemplateIds ?? ctx.acceptedTemplateIds;
   const templates = await listTaskTemplates(ctx.client);
@@ -171,7 +183,7 @@ async function removeTemplateSupport(ctx: NodeContext, reason: "LLM" | "IPFS", f
   const removed = accepted.filter((templateId) => blockedIds.has(templateId));
   if (removed.length === 0) {
     console.warn(`[template-health] ${reason} check failed but no accepted ${reason} templates are enabled: ${failedError}`);
-    return;
+    return { removed: [], txDigest: null };
   }
 
   const digest = await registerOracleNode({
@@ -187,33 +199,74 @@ async function removeTemplateSupport(ctx: NodeContext, reason: "LLM" | "IPFS", f
   console.warn(
     `[template-health] removed ${reason} template support templates=${removed.join(",")} remaining=${nextAccepted.join(",") || "<none>"} tx=${digest || "<none>"} reason=${failedError}`,
   );
+  return { removed, txDigest: digest ?? null };
 }
 
-async function runTemplateHealthCheck(ctx: NodeContext): Promise<void> {
-  const checks: Array<{ name: "LLM" | "IPFS"; enabled: boolean; run: () => Promise<void> }> = [
+async function runTemplateHealthCheck(ctx: NodeContext, healthState: CapabilityHealthRuntimeState): Promise<void> {
+  const checks: Array<{ name: CapabilityName; enabled: boolean; run: () => Promise<void> }> = [
     { name: "LLM", enabled: optBool("LLM_HEALTH_CHECK_ENABLED", true), run: testLlmConfig },
     { name: "IPFS", enabled: optBool("IPFS_HEALTH_CHECK_ENABLED", true), run: testIpfsConfig },
   ];
 
+  healthState.running = true;
+  healthState.lastStartedAtMs = Date.now();
+
   for (const check of checks) {
-    if (!check.enabled) continue;
+    const checkState = healthState.checks[check.name];
+    checkState.enabled = check.enabled;
+
+    if (!check.enabled) {
+      checkState.status = "disabled";
+      continue;
+    }
+
+    const startedAtMs = Date.now();
+    checkState.status = "running";
+    checkState.lastStartedAtMs = startedAtMs;
+    checkState.lastCheckedAtMs = startedAtMs;
+    checkState.templatesRemoved = [];
+    checkState.lastRemovalTxDigest = null;
+    checkState.lastRemovalError = null;
+
     try {
       await check.run();
+      const completedAtMs = Date.now();
+      checkState.status = "ok";
+      checkState.lastCheckedAtMs = completedAtMs;
+      checkState.lastOkAtMs = completedAtMs;
+      checkState.lastError = null;
+      checkState.lastRemovalError = null;
       console.log(`[template-health] ${check.name} check ok`);
     } catch (error: any) {
+      const failedAtMs = Date.now();
       const msg = String(error?.message ?? error);
+      checkState.status = "failed";
+      checkState.lastCheckedAtMs = failedAtMs;
+      checkState.lastErrorAtMs = failedAtMs;
+      checkState.lastError = msg;
       console.warn(`[template-health] ${check.name} check failed: ${msg}`);
-      await removeTemplateSupport(ctx, check.name, msg).catch((removeError: any) => {
+      await removeTemplateSupport(ctx, check.name, msg).then((result) => {
+        checkState.templatesRemoved = result.removed;
+        checkState.lastRemovalTxDigest = result.txDigest;
+      }).catch((removeError: any) => {
+        const removeMsg = String(removeError?.message ?? removeError);
+        checkState.lastRemovalError = removeMsg;
         console.warn(
-          `[template-health] failed to remove ${check.name} template support: ${String(removeError?.message ?? removeError)}`,
+          `[template-health] failed to remove ${check.name} template support: ${removeMsg}`,
         );
       });
     }
   }
+
+  healthState.running = false;
+  healthState.lastCompletedAtMs = Date.now();
 }
 
-export function startTemplateHealthWorker(ctx: NodeContext): void {
+export function startTemplateHealthWorker(ctx: NodeContext, healthState: CapabilityHealthRuntimeState): void {
   if (!optBool("TEMPLATE_HEALTH_WORKER_ENABLED", true)) {
+    healthState.workerEnabled = false;
+    healthState.checks.LLM.status = "disabled";
+    healthState.checks.IPFS.status = "disabled";
     console.log(`[template-health] worker disabled`);
     return;
   }
@@ -221,14 +274,18 @@ export function startTemplateHealthWorker(ctx: NodeContext): void {
   const intervalMs = Math.max(60_000, optInt("TEMPLATE_HEALTH_INTERVAL_MS", 5 * 60_000));
   const initialDelayMs = Math.max(0, optInt("TEMPLATE_HEALTH_INITIAL_DELAY_MS", 30_000));
   let running = false;
+  healthState.workerEnabled = true;
+  healthState.intervalMs = intervalMs;
+  healthState.initialDelayMs = initialDelayMs;
 
   const runOnce = async () => {
     if (running) return;
     running = true;
     try {
-      await runTemplateHealthCheck(ctx);
+      await runTemplateHealthCheck(ctx, healthState);
     } finally {
       running = false;
+      healthState.running = false;
     }
   };
 

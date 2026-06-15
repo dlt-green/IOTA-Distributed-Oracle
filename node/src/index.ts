@@ -36,6 +36,21 @@ import { startTemplateHealthWorker } from "./services/templateHealthWorker";
 import { loadPersistedAcceptedTemplateIds } from "./templateState";
 import { sleep } from "./utils/sleep";
 
+function emptyCapabilityCheck(enabled = true) {
+  return {
+    enabled,
+    status: "pending" as const,
+    lastStartedAtMs: null,
+    lastCheckedAtMs: null,
+    lastOkAtMs: null,
+    lastErrorAtMs: null,
+    lastError: null,
+    templatesRemoved: [],
+    lastRemovalTxDigest: null,
+    lastRemovalError: null,
+  };
+}
+
 function buildContext(): NodeContext {
   const nodeId = parseNodeId(process.argv);
   const client = iotaClient();
@@ -196,6 +211,18 @@ async function main() {
       txDigest: null,
       lastError: null,
     },
+    capabilityHealth: {
+      workerEnabled: false,
+      intervalMs: null,
+      initialDelayMs: null,
+      running: false,
+      lastStartedAtMs: null,
+      lastCompletedAtMs: null,
+      checks: {
+        LLM: emptyCapabilityCheck(optBool("LLM_HEALTH_CHECK_ENABLED", true)),
+        IPFS: emptyCapabilityCheck(optBool("IPFS_HEALTH_CHECK_ENABLED", true)),
+      },
+    },
   };
   logStartup(ctx);
   const monitorServer = startMonitorServer(ctx, runtimeState);
@@ -231,7 +258,7 @@ async function main() {
   startListeners(ctx);
   void replayRecentAssignments(ctx);
   startSchedulerWorker(ctx);
-  startTemplateHealthWorker(ctx);
+  startTemplateHealthWorker(ctx, runtimeState.capabilityHealth);
   runtimeState.listenersStarted = true;
   runtimeState.booting = false;
 
