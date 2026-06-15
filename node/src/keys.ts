@@ -30,15 +30,12 @@ function envPrivateKeyForNode(nodeId: string): string | undefined {
   return undefined;
 }
 
-// =====================================================
-// NEU: Unterstützung für Docker Secrets (NODE_*_PRIVATEKEY_FILE)
-// =====================================================
 function envPrivateKeyFileForNode(nodeId: string): string | undefined {
   const fileScoped = process.env[`NODE_${nodeId}_PRIVATEKEY_FILE`]?.trim();
   if (fileScoped && fs.existsSync(fileScoped)) {
     return fileScoped;
   }
-  // Fallback speziell für Node 1 (wie in docker-compose.yml)
+  
   const file1 = process.env.NODE_1_PRIVATEKEY_FILE?.trim();
   if (file1 && fs.existsSync(file1)) {
     return file1;
@@ -53,7 +50,6 @@ function readPrivateKeyFromFile(nodeId: string): string | undefined {
   try {
     let content = fs.readFileSync(filePath, 'utf8').trim();
 
-    // 0x Prefix entfernen, falls vorhanden
     if (content.startsWith('0x')) {
       content = content.slice(2);
     }
@@ -75,17 +71,17 @@ export function loadOrCreateNodeIdentity(nodeId: string): NodeIdentity {
   let keypair: Ed25519Keypair;
 
   if (fs.existsSync(fp)) {
-    // 1. Priorität: Lokale Key-Datei (wenn bereits vorhanden)
+
     secretKeyBech32 = fs.readFileSync(fp, 'utf8').trim();
     keypair = keypairFromSecretKey(secretKeyBech32, fp);
   } else if ((secretKeyBech32 = readPrivateKeyFromFile(nodeId) ?? '')) {
-    // 2. Priorität: Docker Secret Datei (NODE_1_PRIVATEKEY_FILE)
+
     keypair = keypairFromSecretKey(secretKeyBech32, `NODE_${nodeId}_PRIVATEKEY_FILE`);
   } else if ((secretKeyBech32 = envPrivateKeyForNode(nodeId) ?? '')) {
-    // 3. Priorität: Environment Variable (.env)
+
     keypair = keypairFromSecretKey(secretKeyBech32, `NODE_${nodeId}_PRIVATEKEY / PRIVATEKEY`);
   } else {
-    // 4. Fallback: Neuen Key generieren und speichern
+
     keypair = new Ed25519Keypair();
     secretKeyBech32 = keypair.getSecretKey();
     fs.writeFileSync(fp, secretKeyBech32, 'utf8');
