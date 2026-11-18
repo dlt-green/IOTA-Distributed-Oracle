@@ -6,6 +6,29 @@ import { loadOrCreateClientIdentity } from "../src/keys.js";
 import fs from "node:fs";
 import path from "node:path";
 
+test('blocked destinations emit only hostname and reason, including redirect and DNS denials', async () => {
+  const events: any[] = [];
+  const request = createTaskHttpClient({
+    lookup: (async () => [{ address: '127.0.0.1', family: 4 }]) as any,
+    fetch: (async () => { throw new Error('must not connect'); }) as any,
+    onBlocked: entry => { events.push(entry); },
+  });
+  await assert.rejects(request({ url: 'http://metadata.example.com/private?token=secret' }), /TASK_DESTINATION_FORBIDDEN/);
+  await assert.rejects(request({ url: 'http://user:password@127.0.0.1/private?token=secret' }), /TASK_URL_FORBIDDEN/);
+  assert.deepEqual(events, [
+    { hostname: 'metadata.example.com', code: 'TASK_DESTINATION_FORBIDDEN' },
+    { hostname: '127.0.0.1', code: 'TASK_URL_FORBIDDEN' },
+  ]);
+  assert.doesNotMatch(JSON.stringify(events), /secret|password|private|token/);
+  const redirected: any[] = [];
+  const redirect = createTaskHttpClient({ lookup: (async () => [{ address: '93.184.215.14', family: 4 }]) as any,
+    fetch: (async () => new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/credentials?secret=1' } })) as any,
+    onBlocked: entry => { redirected.push(entry); },
+  });
+  await assert.rejects(redirect({ url: 'https://public.example.com/' }), /TASK_DESTINATION_FORBIDDEN/);
+  assert.equal(redirected[0].hostname, '169.254.169.254');
+});
+
 const publicAnswer = { address: "93.184.215.14", family: 4 };
 function fixture(responses: Response[], answers = [publicAnswer]) {
   const calls: any[] = [];

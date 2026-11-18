@@ -34,6 +34,12 @@ walletAuth.install(app);
 function sendApiError(res, status, error) {
     const message = error instanceof Error ? error.message : String(error);
     const safe = status >= 500 && !/^(TASK_[A-Z_0-9]+|UPSTREAM_[A-Z_0-9]+)$/.test(message) ? "REQUEST_FAILED" : message;
+    if (message === 'PREPARATION_CAPACITY') {
+        res.locals.auditCode = message;
+        res.setHeader('Retry-After', '1');
+        res.status(503).json({ error: message });
+        return;
+    }
     res.status(message === "UPSTREAM_CAPACITY" ? 503 : status).json({ error: safe });
 }
 function asRecord(value) {

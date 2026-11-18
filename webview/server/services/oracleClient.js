@@ -5,11 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import dotenv from "dotenv";
+import { createPreparationRunner, preparationLimit } from "../preparationRunner.js";
+import { auditFileFromEnv } from "../auditFile.js";
 import { preparationEnvironment } from "../clientEnvironment.js";
 import { config, getRuntimeConfig } from "../config.js";
 const activeChildren = new Set();
 let cleanupHooksInstalled = false;
-let reservedChildren = 0;
+const terminatingChildren = new WeakSet();
 function npmCommand() {
     return "npm";
 }
@@ -85,34 +87,44 @@ async function spawnClientCommand(args, network) {
     return spawn(npmCommand(), effectiveArgs, {
         cwd: config.oracleClientDir,
         shell: false,
+        detached: true,
         env,
     });
 }
 function childTimeoutMs() {
     const raw = process.env.WEBVIEW_CLIENT_TIMEOUT_MS?.trim();
     const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 120000;
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 120_000;
 }
 function terminateChild(child, reason) {
-    if (child.killed || child.exitCode != null)
+    if (terminatingChildren.has(child))
         return;
+    terminatingChildren.add(child);
     try {
         if (process.platform === "win32") {
-            void spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-                stdio: "ignore",
-                shell: false,
-            });
+            if (child.exitCode == null && child.signalCode == null)
+                void spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", shell: false });
             return;
         }
-        child.kill("SIGTERM");
+        // Unix children have their own process group, including npm/tsx descendants.
+        if (!child.pid)
+            return;
+        try {
+            process.kill(-child.pid, "SIGTERM");
+        }
+        catch (error) {
+            if (error.code !== "ESRCH")
+                throw error;
+        }
         setTimeout(() => {
-            if (!child.killed && child.exitCode == null) {
-                child.kill("SIGKILL");
+            try {
+                process.kill(-child.pid, "SIGKILL");
             }
-        }, 5000).unref();
+            catch { /* The process group may already be gone. */ }
+        }, 5_000).unref();
     }
     catch {
-        console.warn(`[iota_oracle_webview] failed to terminate child (${reason}) pid=${String(child.pid ?? "?")}`);
+        console.warn(JSON.stringify({ event: "preparation_termination_failed", reason, pid: child.pid }));
     }
 }
 function installCleanupHooks() {
@@ -128,42 +140,12 @@ function installCleanupHooks() {
     process.on("SIGINT", () => cleanup("SIGINT"));
     process.on("SIGTERM", () => cleanup("SIGTERM"));
 }
-async function runChildCommand(childFactory) {
-    if (reservedChildren >= 4)
-        throw new Error("Preparation capacity reached. Retry later.");
-    reservedChildren++;
-    try {
-        installCleanupHooks();
-        const child = await childFactory();
-        activeChildren.add(child);
-        return await new Promise((resolve, reject) => {
-            let stdout = "";
-            let stderr = "";
-            const timeout = setTimeout(() => {
-                terminateChild(child, "timeout");
-            }, childTimeoutMs());
-            child.stdout?.on("data", (chunk) => {
-                stdout += String(chunk);
-            });
-            child.stderr?.on("data", (chunk) => {
-                stderr += String(chunk);
-            });
-            child.on("error", (error) => {
-                clearTimeout(timeout);
-                activeChildren.delete(child);
-                reject(error);
-            });
-            child.on("close", (exitCode) => {
-                clearTimeout(timeout);
-                activeChildren.delete(child);
-                resolve({ stdout, stderr, exitCode });
-            });
-        });
-    }
-    finally {
-        reservedChildren--;
-    }
-}
+const runChildCommand = createPreparationRunner({
+    limit: preparationLimit(), timeoutMs: childTimeoutMs, terminate: terminateChild,
+    started: child => { installCleanupHooks(); activeChildren.add(child); },
+    closed: child => { activeChildren.delete(child); },
+    emit: auditFileFromEnv().emit,
+});
 function extractJsonFromStdout(stdout) {
     const trimmed = stdout.trim();
     if (!trimmed) {

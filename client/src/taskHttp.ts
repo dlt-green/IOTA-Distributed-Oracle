@@ -20,7 +20,7 @@ const globalV6 = new BlockList();
 globalV6.addSubnet("2000::", 3, "ipv6");
 
 export class TaskHttpError extends Error {
-  constructor(public readonly code: string) { super(code); this.name = "TaskHttpError"; }
+  constructor(public readonly code: string, public readonly blockedHostname?: string) { super(code); this.name = "TaskHttpError"; }
 }
 
 export function isPublicAddress(address: string): boolean {
@@ -34,28 +34,28 @@ export function parseTaskUrl(value: string): URL {
   let url: URL;
   try { url = new URL(value); } catch { throw new TaskHttpError("TASK_URL_INVALID"); }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
-    throw new TaskHttpError("TASK_URL_FORBIDDEN");
+    throw new TaskHttpError("TASK_URL_FORBIDDEN", url.hostname);
   }
   const host = url.hostname.replace(/^\[|\]$/g, "");
   const normalizedHost = host.toLowerCase().replace(/\.$/, "");
   const deniedHosts = String(process.env.TASK_HTTP_DENIED_HOSTS ?? "").split(",")
     .map((entry) => entry.trim().toLowerCase().replace(/\.$/, "")).filter(Boolean);
   if (deniedHosts.some((entry) => normalizedHost === entry || normalizedHost.endsWith(`.${entry}`))) {
-    throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN");
+    throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN", url.hostname);
   }
   const allowedHosts = String(process.env.TASK_HTTP_ALLOWED_HOSTS ?? "").split(",")
     .map(entry => entry.trim().toLowerCase().replace(/\.$/, "")).filter(Boolean);
   if (allowedHosts.length && !allowedHosts.some(entry => entry.startsWith("*.")
     ? normalizedHost.endsWith(`.${entry.slice(2)}`) : normalizedHost === entry)) {
-    throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN");
+    throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN", url.hostname);
   }
   const allowedPorts = String(process.env.TASK_HTTP_ALLOWED_PORTS ?? "").split(",").map(entry => entry.trim()).filter(Boolean);
   if (allowedPorts.some(entry => !/^\d+$/.test(entry) || Number(entry) < 1 || Number(entry) > 65535)) throw new TaskHttpError("TASK_POLICY_INVALID");
   if (allowedPorts.length && !allowedPorts.some(entry => Number(entry) === Number(url.port || (url.protocol === "https:" ? 443 : 80)))) {
-    throw new TaskHttpError("TASK_PORT_FORBIDDEN");
+    throw new TaskHttpError("TASK_PORT_FORBIDDEN", url.hostname);
   }
   if (isIP(host) ? !isPublicAddress(host) : (!normalizedHost.includes(".") || /\.(localhost|local|internal|lan|home|test|invalid)$/i.test(normalizedHost))) {
-    throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN");
+    throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN", url.hostname);
   }
   url.hash = "";
   return url;
@@ -82,8 +82,10 @@ type Options = {
 };
 
 // Injectable dependencies support offline tests, never task-controlled configuration.
-export function createTaskHttpClient(deps = { lookup, fetch: undiciFetch }) {
-  return async (opts: Options): Promise<{ bytes: Buffer; contentType: string | null; contentLength: string | null; contentRange: string | null }> => {
+export function createTaskHttpClient(deps: { lookup: typeof lookup; fetch: typeof undiciFetch;
+  onBlocked?: (entry: { hostname: string; code: string }) => void;
+} = { lookup, fetch: undiciFetch }) {
+  const request = async (opts: Options): Promise<{ bytes: Buffer; contentType: string | null; contentLength: string | null; contentRange: string | null }> => {
     let url = parseTaskUrl(opts.url);
     const method = String(opts.method ?? "GET").toUpperCase();
     if (method !== "GET" && method !== "HEAD") throw new TaskHttpError("TASK_METHOD_FORBIDDEN");
@@ -108,7 +110,7 @@ export function createTaskHttpClient(deps = { lookup, fetch: undiciFetch }) {
           ? [{ address: host, family: isIP(host) }]
           : await Promise.race([deps.lookup(host, { all: true }), expired]);
         if (!addresses.length || addresses.some((item) => !isPublicAddress(item.address))) {
-          throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN");
+          throw new TaskHttpError("TASK_DESTINATION_FORBIDDEN", url.hostname);
         }
         // Pin the validated DNS answer to this connection; preserve hostname for TLS/SNI.
         const dispatcher = new Agent({ connect: { lookup: pinnedLookup(addresses), rejectUnauthorized: true } });
@@ -158,6 +160,22 @@ export function createTaskHttpClient(deps = { lookup, fetch: undiciFetch }) {
       if (error instanceof TaskHttpError) throw error;
       throw new TaskHttpError(controller.signal.aborted ? "TASK_FETCH_TIMEOUT" : "TASK_FETCH_FAILED");
     } finally { clearTimeout(deadline!); }
+  };
+  return async (opts: Options) => {
+    try { return await request(opts); }
+    catch (error) {
+      if (error instanceof TaskHttpError && error.blockedHostname &&
+          /^(TASK_DESTINATION_FORBIDDEN|TASK_URL_FORBIDDEN|TASK_PORT_FORBIDDEN)$/.test(error.code)) {
+        const entry = { hostname: error.blockedHostname.toLowerCase().slice(0, 253), code: error.code };
+        // Only the preparation subprocess emits this private diagnostic protocol.
+        // JSON encoding prevents newline injection; no URL path, query or credentials are included.
+        try {
+          if (deps.onBlocked) deps.onBlocked(entry);
+          else if (process.env.ORACLE_PREPARE_ONLY === '1') process.stderr.write(`ORACLE_TASK_DESTINATION_BLOCKED ${JSON.stringify(entry)}\n`);
+        } catch { /* Logging must never convert a denied request into an allowed one. */ }
+      }
+      throw error;
+    }
   };
 }
 
