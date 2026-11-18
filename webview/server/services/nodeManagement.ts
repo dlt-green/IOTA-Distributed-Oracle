@@ -2,7 +2,7 @@ import { readClient, boundedFetch } from "../upstream.js";
 // Copyright (c) 2026 Stefano Della Valle
 // SPDX-License-Identifier: LicenseRef-Proprietary
 
-import { toB64 } from "@iota/bcs";
+import { toBase64 } from "@iota/iota-sdk/utils";
 import { IotaClient } from "@iota/iota-sdk/client";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { getRuntimeConfig, type OracleNetwork } from "../config.js";
@@ -118,7 +118,7 @@ function gasBudget(): number {
 
 async function serializeTransactionForWallet(tx: Transaction, client: IotaClient): Promise<string> {
   const bytes = await tx.build({ client });
-  return toB64(bytes);
+  return toBase64(bytes);
 }
 
 async function getStateFields(client: IotaClient, stateId: string): Promise<Record<string, unknown>> {

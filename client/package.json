@@ -11,7 +11,7 @@
     "auth:webview": "tsx src/authenticateWebview.ts"
   },
   "dependencies": {
-    "@iota/iota-sdk": "1.10.0",
+    "@iota/iota-sdk": "^1.17.0",
     "dotenv": "^16.6.1",
     "undici": "^6.29.1"
   },

@@ -694,6 +694,7 @@ async function readNoCommitMessages(iotaClient: any, taskId: string, taskType: s
       },
     },
     limit: NO_COMMIT_FETCH_LIMIT,
+    order: "descending",
   });
 
   const normalizedTaskId = normalizeAddress(taskId);

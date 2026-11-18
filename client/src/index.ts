@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { probeStorageContentLength } from "./storageProbe.js";
+import { serializeTransactionForWallet } from "./walletTransaction.js";
 import fs from "node:fs";
 import path from "node:path";
 import { Transaction, coinWithBalance } from "@iota/iota-sdk/transactions";
@@ -1444,10 +1445,6 @@ async function executeCreateTask(
   }
 
   throw lastError;
-}
-
-async function serializeTransactionForWallet(tx: Transaction, client: AnyClient): Promise<string> {
-  return tx.serialize();
 }
 
 async function prepareCreateTaskPlan(client: AnyClient, sender: string, taskArg?: string) {

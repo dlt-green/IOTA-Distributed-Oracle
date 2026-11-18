@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine
+FROM node:24-alpine
 
 RUN apk add --no-cache libc6-compat python3 make g++
 
@@ -13,9 +13,9 @@ RUN npm config set registry https://registry.npmjs.org/
 
 RUN --mount=type=cache,target=/root/.npm \
     cd /workspace/webview && \
-    npm install --no-audit --fund=false --loglevel=info && \
+    npm ci --no-audit --fund=false --loglevel=info && \
     cd /workspace/client && \
-    npm install --no-audit --fund=false --loglevel=info
+    npm ci --no-audit --fund=false --loglevel=info
 
 COPY webview ./webview
 COPY client ./client

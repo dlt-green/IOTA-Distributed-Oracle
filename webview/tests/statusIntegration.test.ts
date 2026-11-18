@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("complete status service answers operational reads while large historical work is pending or throttled", async t => {
+test("complete status service answers operational reads while large historical work is pending or throttled", { timeout: 10000 }, async t => {
   const originalFetch = globalThis.fetch;
   const keys = ["TESTNET_ORACLE_TASKS_PACKAGE_ID", "TESTNET_ORACLE_STATE_ID", "TESTNET_IOTA_RPC_URL", "TESTNET_IOTA_GRAPHQL_URL",
     "MAINNET_ORACLE_TASKS_PACKAGE_ID", "MAINNET_ORACLE_STATE_ID", "MAINNET_IOTA_RPC_URL", "MAINNET_IOTA_GRAPHQL_URL", "WEBVIEW_HISTORY_PER_MINUTE"];
