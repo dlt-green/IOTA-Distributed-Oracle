@@ -440,6 +440,7 @@ async function queryModuleEvents(
   const page = await client.queryEvents({
     query: { MoveModule: { package: packageId, module: moduleName } },
     limit: eventFetchLimit,
+    order: "descending",
   });
   return (page.data ?? []).map((event) => normalizeEvent(moduleName, event as RpcEvent));
 }
