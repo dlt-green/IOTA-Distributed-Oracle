@@ -13,7 +13,6 @@
     "test:security": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "zod": "^3.23.8",
     "undici": "^6.29.1",
     "@iota/iota-sdk": "^1.17.0",
     "@iota/identity-wasm": "1.9.7-beta.1",
@@ -23,5 +22,9 @@
     "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "valibot": "1.5.0",
+    "form-data": "4.0.6"
   }
 }
