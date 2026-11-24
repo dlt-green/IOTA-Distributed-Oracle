@@ -92,6 +92,10 @@ require_cmd() {
 }
 
 require_cmd iota
+require_cmd python3
+[[ "$(iota client active-env 2>/dev/null | tr -d '\r\n')" == "testnet" ]] || {
+  echo "[error] switch the IOTA CLI to testnet before registration" >&2; exit 1;
+}
 [[ -n "$SYSTEM_PKG" ]] || { echo "[error] set SYSTEM_PKG or TESTNET_ORACLE_SYSTEM_PACKAGE_ID" >&2; exit 1; }
 [[ -n "$STATE_ID" ]] || { echo "[error] set STATE_ID or TESTNET_ORACLE_STATE_ID" >&2; exit 1; }
 [[ -n "$NODE_REGISTRY_ID" ]] || { echo "[error] set NODE_REGISTRY_ID or TESTNET_ORACLE_NODE_REGISTRY_ID" >&2; exit 1; }

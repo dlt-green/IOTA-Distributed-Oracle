@@ -26,8 +26,14 @@ npm run daemon -- --node 1
 ```
 
 Registration rule:
-- if `IOTA_NETWORK` is not `dev`/`devnet` (or `local`/`localnet`), node registration is forced to `systemState::register_oracle_node` and requires a `systemState::DelegatedControllerCap` + signer key.
-- in prod mode, if `DELEGATED_CONTROLLER_CAP_ID` is not set, node tries to auto-detect an owned `systemState::DelegatedControllerCap` from the signer address.
+- Set `IOTA_NETWORK` explicitly. Testnet/mainnet require `REGISTER_MODE=prod`
+  (or inferred prod mode) and a `validator_caps::DelegatedControllerCap` owned
+  by the signer. A dev-mode override on those networks fails.
+- In prod mode, if `DELEGATED_CONTROLLER_CAP_ID` is not set, the node tries to
+  auto-detect a matching delegated cap owned by the signer.
+- A new package with an old State/registry fails configuration validation.
+  Follow the [testnet migration procedure](../docs/TESTNET_REGISTRATION_MIGRATION.md)
+  for the complete set of IDs and restart/re-registration checks.
 
 ## Test current node configuration
 

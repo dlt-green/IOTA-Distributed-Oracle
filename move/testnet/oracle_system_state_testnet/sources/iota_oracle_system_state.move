@@ -31,6 +31,7 @@ module iota_oracle_system_state::systemState {
     const EProposalNotFound: u64 = 67;
     const EValidatorCapAlreadyRegistered: u64 = 68;
     const EDelegatedCapInUse: u64 = 69;
+    const EWrongNodeRegistry: u64 = 70;
     const EUnprunedEpoch: u64 = 18446744073709551615;
 
     const PROPOSAL_KIND_NONE: u8 = 0;
@@ -188,7 +189,7 @@ module iota_oracle_system_state::systemState {
         };
         let node_registry_id = object::id(&node_registry);
 
-        let st = State {
+        let mut st = State {
             id: object::new(ctx),
             network: b"testnet",
             node_registry_id,
@@ -199,6 +200,7 @@ module iota_oracle_system_state::systemState {
             template_proposal_id: 0,
             template_proposals: vector::empty(),
         };
+        bootstrap_approved_templates(&mut st);
         transfer::share_object(st);
         transfer::share_object(node_registry);
 
@@ -208,6 +210,150 @@ module iota_oracle_system_state::systemState {
         let cap = ControllerCap { id: object::new(ctx) };
         transfer::transfer(cap, sender);
     }
+
+    #[test_only]
+    public fun init_for_testing(ctx: &mut TxContext) { init(ctx); }
+
+    // BEGIN APPROVED TEMPLATE SNAPSHOT
+    // Frozen approved configuration; executed only by module init.
+    fun bootstrap_approved_templates(st: &mut State) {
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 4 }, TaskTemplate {
+            allow_storage: 1,
+            base_price_iota: 1000000000,
+            included_download_bytes: 10485760,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 10485760,
+            max_retention_days: 30,
+            min_retention_days: 30,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 347034,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[83, 84, 79, 82, 65, 71, 69],
+            template_id: 4,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 5 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[76, 76, 77, 95, 69, 88, 84, 82, 65, 67, 84, 95, 83, 84, 82, 85, 67, 84, 85, 82, 69, 68],
+            template_id: 5,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 6 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[76, 76, 77, 95, 67, 76, 65, 83, 83, 73, 70, 89, 95, 68, 79, 67, 85, 77, 69, 78, 84],
+            template_id: 6,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 7 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[76, 76, 77, 95, 82, 73, 83, 75, 95, 83, 67, 79, 82, 69],
+            template_id: 7,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 8 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[68, 76, 86, 67, 95, 86, 65, 76, 73, 68, 65, 84, 73, 79, 78],
+            template_id: 8,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 9 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[71, 69, 84, 95, 84, 69, 88, 84, 95, 83, 84, 82, 73, 80],
+            template_id: 9,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 10 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[71, 69, 84, 95, 74, 83, 79, 78, 95, 67, 65, 78, 79, 78, 73, 67, 65, 76],
+            template_id: 10,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 11 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 21323200,
+            task_type: vector[71, 69, 84, 95, 72, 84, 77, 76, 95, 83, 84, 82, 73, 80, 95, 68, 89, 78, 65, 77, 73, 67],
+            template_id: 11,
+        });
+        dynamic_field::add(&mut st.id, TaskTemplateKey { template_id: 12 }, TaskTemplate {
+            allow_storage: 0,
+            base_price_iota: 1000000000,
+            included_download_bytes: 8192,
+            is_enabled: 1,
+            max_input_bytes: 8192,
+            max_output_bytes: 8192,
+            max_retention_days: 0,
+            min_retention_days: 0,
+            price_per_download_byte_iota: 0,
+            price_per_retention_day_iota: 0,
+            scheduler_fee_iota: 0,
+            task_type: vector[76, 76, 77, 95, 79, 80, 69, 78, 95, 81, 85, 69, 83, 84, 73, 79, 78],
+            template_id: 12,
+        });
+    }
+    // END APPROVED TEMPLATE SNAPSHOT
 
     public entry fun set_global_economic_config(
         _cap: &ControllerCap,
@@ -562,9 +708,9 @@ module iota_oracle_system_state::systemState {
         accepted_template_ids: vector<u64>,
         ctx: &mut TxContext
     ) {
-        // On devnet the controller cap is intentionally optional, so this
-        // production path is disabled.
+        // Only this capability-checked path may populate the testnet registry.
         assert!(!is_devnet(st), EInvalidNetworkMode);
+        assert!(object::id(node_registry) == st.node_registry_id, EWrongNodeRegistry);
         prune_oracle_nodes_if_epoch_changed(node_registry, st, system, ctx);
         let sender = iota::tx_context::sender(ctx);
         assert!(sender == oracle_addr, EOracleSenderMismatch);
@@ -573,7 +719,6 @@ module iota_oracle_system_state::systemState {
         let validator_cap_id = validator_cap_id_from_delegated_cap(delegated_cap);
         upsert_oracle_node(
             node_registry,
-            false,
             validator,
             oracle_addr,
             pubkey,
@@ -584,24 +729,15 @@ module iota_oracle_system_state::systemState {
     }
 
     public entry fun register_oracle_node_dev(
-        node_registry: &mut NodeRegistry,
-        oracle_addr: address,
-        pubkey: vector<u8>,
-        accepted_template_ids: vector<u64>,
-        ctx: &mut TxContext
+        _node_registry: &mut NodeRegistry,
+        _oracle_addr: address,
+        _pubkey: vector<u8>,
+        _accepted_template_ids: vector<u64>,
+        _ctx: &mut TxContext
     ) {
-        let sender = iota::tx_context::sender(ctx);
-        let fallback_cap_id = object::id(node_registry);
-        upsert_oracle_node(
-            node_registry,
-            true,
-            sender,
-            oracle_addr,
-            pubkey,
-            accepted_template_ids,
-            fallback_cap_id,
-            fallback_cap_id,
-        );
+        // Retain the ABI only to reject old clients explicitly. A network
+        // setting supplied by a client must never enable cap-free registration.
+        abort EInvalidNetworkMode
     }
     
 
@@ -790,7 +926,6 @@ module iota_oracle_system_state::systemState {
 
     fun upsert_oracle_node(
         node_registry: &mut NodeRegistry,
-        devnet_mode: bool,
         validator: address,
         oracle_addr: address,
         pubkey: vector<u8>,
@@ -803,17 +938,14 @@ module iota_oracle_system_state::systemState {
             let n = vector::borrow(&node_registry.oracle_nodes, i);
 
             if (n.addr == oracle_addr && n.validator != validator) abort EOracleAddrTaken;
-            if (!devnet_mode && n.validator_controller_cap_id == validator_cap_id && n.addr != oracle_addr) {
+            if (n.validator_controller_cap_id == validator_cap_id && n.addr != oracle_addr) {
                 abort EValidatorCapAlreadyRegistered
             };
-            if (!devnet_mode && n.delegated_controller_cap_id == delegated_cap_id && n.addr != oracle_addr) {
+            if (n.delegated_controller_cap_id == delegated_cap_id && n.addr != oracle_addr) {
                 abort EDelegatedCapInUse
             };
 
-            if (
-                (!devnet_mode && n.validator_controller_cap_id == validator_cap_id) ||
-                (devnet_mode && n.addr == oracle_addr)
-            ) {
+            if (n.validator_controller_cap_id == validator_cap_id) {
                 let n_mut = vector::borrow_mut(&mut node_registry.oracle_nodes, i);
                 n_mut.validator = validator;
                 n_mut.addr = oracle_addr;

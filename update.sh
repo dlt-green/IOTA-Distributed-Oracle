@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
+export GIT_TERMINAL_PROMPT=0
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -13,13 +15,16 @@ INCLUDE_WEBVIEW=1
 INCLUDE_TRAEFIK=0
 DEVNET_COMPOSE=0
 REMOVE_ORPHANS=0
+READY_TIMEOUT="${UPDATE_READY_TIMEOUT:-180}"
 
 usage() {
   cat <<'EOF'
 Usage: ./update.sh [options]
 
 Updates the oracle node checkout, environment values, dependencies, builds, and
-Docker services.
+Docker services. Docker upgrades build inside Node 24 images and need no host npm.
+Existing wallet keys, delegated caps and provider credentials are preserved.
+Node readiness is checked before success (UPDATE_READY_TIMEOUT, default 180s).
 
 Options:
   --network auto|testnet|devnet  Env sync script to run (default: auto)
@@ -121,7 +126,7 @@ npm_install_and_build() {
 docker_up() {
   local compose_file="$1"
   local project_dir="$2"
-  local args=(up --build -d)
+  local args=(up --build --force-recreate -d)
 
   if [[ ! -f "$compose_file" ]]; then
     echo "Compose file not found: $compose_file" >&2
@@ -134,6 +139,35 @@ docker_up() {
 
   log "Updating Docker services from $compose_file"
   (cd "$project_dir" && compose -f "$(basename "$compose_file")" "${args[@]}")
+}
+
+wait_for_nodes() {
+  local compose_file="$1"
+  local service deadline services found=0
+  services="$(cd node && compose -f "$compose_file" config --services)" || return 1
+  while IFS= read -r service; do
+    [[ "$service" == oracle-node-* ]] || continue
+    found=1
+    deadline=$((SECONDS + READY_TIMEOUT))
+    log "Waiting for $service registration and readiness (timeout ${READY_TIMEOUT}s)"
+    until (cd node && compose -f "$compose_file" exec -T "$service" node -e '
+      const id = process.env.NODE_ID || "1";
+      const port = process.env[`NODE_${id}_MONITOR_PORT`] || process.env.MONITOR_PORT || (9080 + Number(id) - 1);
+      const rawHost = process.env[`NODE_${id}_MONITOR_HOST`] || process.env.MONITOR_HOST || "127.0.0.1";
+      const host = rawHost === "0.0.0.0" ? "127.0.0.1" : rawHost === "::" ? "[::1]" : rawHost;
+      fetch(`http://${host}:${port}/health`, {signal: AbortSignal.timeout(4000)})
+        .then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1));
+    ') >/dev/null 2>&1; do
+      if (( SECONDS >= deadline )); then
+        echo "[error] $service did not become ready. Check node logs, delegated cap ownership and RPC availability." >&2
+        echo "[error] Upgrade is not confirmed; no automatic rollback to the vulnerable package." >&2
+        return 1
+      fi
+      sleep 3
+    done
+    log "$service ready"
+  done <<< "$services"
+  [[ "$found" == 1 ]] || { echo "[error] No oracle-node services found; upgrade not confirmed." >&2; return 1; }
 }
 
 while [[ $# -gt 0 ]]; do
@@ -202,13 +236,20 @@ esac
 
 log "Starting update for $NETWORK"
 require_cmd git
+require_cmd python3
+[[ "$READY_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid UPDATE_READY_TIMEOUT" >&2; exit 1; }
 
 if [[ "$SKIP_DOCKER" == 0 ]]; then
   require_cmd docker
 fi
 
 if [[ "$SKIP_LOCAL_BUILD" == 0 ]]; then
-  require_cmd npm
+  if [[ "$SKIP_DOCKER" == 0 ]]; then
+    # Docker builds use the pinned Node 24 image; host Node/npm are unnecessary.
+    SKIP_LOCAL_BUILD=1
+  else
+    require_cmd npm
+  fi
 fi
 
 if [[ "$SKIP_GIT" == 0 ]]; then
@@ -256,6 +297,8 @@ if [[ "$SKIP_DOCKER" == 0 ]]; then
   if [[ "$INCLUDE_WEBVIEW" == 1 ]]; then
     docker_up "webview/docker-compose.yml" "webview"
   fi
+
+  wait_for_nodes "$NODE_COMPOSE"
 
   log "Current containers"
   docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'

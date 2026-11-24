@@ -192,6 +192,19 @@ EOF
 
 require_cmd iota
 require_cmd python3
+python3 "${SCRIPT_DIR}/prepare_bootstrap.py" --check
+
+[[ "$TARGET_ENV" == "testnet" ]] || { echo "[error] this kit is testnet-only" >&2; exit 1; }
+# Never republish a checkout that still contains the cap-free testnet writer.
+python3 - "${SYSTEM_STATE_DIR}/sources/iota_oracle_system_state.move" <<'PY'
+from pathlib import Path
+import re
+import sys
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'public entry fun register_oracle_node_dev\([^)]*\)\s*\{([^}]*)\}', source, re.S)
+if not match or re.sub(r'//[^\n]*', '', match.group(1)).strip() != 'abort EInvalidNetworkMode':
+    raise SystemExit("Refusing publish: testnet dev registration must unconditionally abort")
+PY
 
 [[ -d "$VALIDATOR_CAPS_DIR" ]] || { echo "[error] missing dir: $VALIDATOR_CAPS_DIR" >&2; exit 1; }
 [[ -d "$SYSTEM_STATE_DIR" ]] || { echo "[error] missing dir: $SYSTEM_STATE_DIR" >&2; exit 1; }
@@ -199,6 +212,9 @@ require_cmd python3
 [[ -d "$SCHEDULER_DIR" ]] || { echo "[error] missing dir: $SCHEDULER_DIR" >&2; exit 1; }
 
 switch_context
+
+echo "[verify] running registration regression tests before publication"
+iota move test --path "$SYSTEM_STATE_DIR" --skip-fetch-latest-git-deps
 
 echo "[info] active env: $(iota client active-env 2>/dev/null | tr -d '\n')"
 echo "[info] active address: $(iota client active-address 2>/dev/null | tr -d '\n')"
@@ -232,3 +248,6 @@ publish_package "$TASKS_DIR" "$TASKS_TXT" "iota_oracle_tasks" "oracle tasks" TAS
 publish_package "$SCHEDULER_DIR" "$SCHEDULER_TXT" "iota_oracle_scheduler" "scheduler" SCHEDULER_PKG
 
 print_summary "$VALIDATOR_CAPS_PKG" "$SYSTEM_STATE_PKG" "$TASKS_PKG" "$SCHEDULER_PKG"
+echo "[next] Run bash move/testnet/update_testnet_envs.sh --check, then without --check."
+echo "[next] Migrate all runtime IDs and re-register nodes. Old packages/tasks remain callable."
+echo "[guide] docs/TESTNET_REGISTRATION_MIGRATION.md"

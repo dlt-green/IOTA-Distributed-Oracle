@@ -1150,6 +1150,7 @@ module iota_oracle_tasks::oracle_tasks {
         borrow_latest_result(task).reason_code
     }
 
+    #[test_only]
     public fun append_result_for_testing(
         task: &mut Task,
         produced_at_ms: u64,

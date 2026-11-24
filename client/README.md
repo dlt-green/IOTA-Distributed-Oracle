@@ -137,3 +137,9 @@ bearer session as JSON; it does not send the key or a blockchain transaction.
 Protect the printed token as a credential. See
 [Webview API authentication](../docs/WEBVIEW_API_AUTHENTICATION.md) for request
 format, renewal, limits and the reusable `authenticateWebview` helper.
+
+## Testnet registration security migration
+
+For the fresh testnet deployment, update all package/object IDs together and
+recreate tasks against the new package. Old tasks and results are not migrated
+automatically. Follow [the migration procedure](../docs/TESTNET_REGISTRATION_MIGRATION.md).

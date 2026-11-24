@@ -11,6 +11,7 @@ import { resolveNodeRegistryId } from "./services/nodeRegistry";
 import { readRegisteredOracleNodeByAddr } from "./services/schedulerReader";
 import { loadPersistedAcceptedTemplateIds, savePersistedAcceptedTemplateIds } from "./templateState";
 import { signAndExecuteWithLockRetry } from "./txRetry.js";
+import { resolveRegisterMode, validateRegistrationState } from "./registrationPolicy.js";
 
 function mustEnv(key: string): string {
   const v = process.env[key]?.trim();
@@ -47,28 +48,6 @@ function getStateId(): string {
 
 function getClockId(): string {
   return (envByNetwork("IOTA_CLOCK_ID") || "0x6").trim() || "0x6";
-}
-
-function isDevLikeNetwork(networkRaw: string | undefined): boolean {
-  const network = String(networkRaw ?? "").trim().toLowerCase();
-  return network === "" || network === "dev" || network === "devnet" || network === "local" || network === "localnet";
-}
-
-function resolveRegisterMode(): "off" | "dev" | "prod" {
-  const raw = String(process.env.REGISTER_MODE ?? "").trim().toLowerCase();
-  if (raw === "off" || raw === "false" || raw === "0") return "off";
-  const networkIsDevLike = isDevLikeNetwork(process.env.IOTA_NETWORK);
-
-  if (raw === "dev") {
-    // Safety rule: non-dev networks cannot use dev registration mode.
-    return networkIsDevLike ? "dev" : "prod";
-  }
-  if (raw === "prod") return "prod";
-
-  // Default inference by network:
-  // - dev/devnet/local/localnet -> dev registration (no controller cap required)
-  // - all other networks         -> prod registration (delegated controller cap required)
-  return networkIsDevLike ? "dev" : "prod";
 }
 
 function gasBudget(envKey: string, def: number): number {
@@ -163,13 +142,6 @@ function normalizedStructTag(type: any): string | null {
   return `${address}::${module}::${name}`;
 }
 
-function typeTagPackageId(typeTag: string | null | undefined): string | null {
-  const raw = String(typeTag ?? "").trim();
-  if (!raw) return null;
-  const match = /^(0x[a-fA-F0-9]+)::/.exec(raw);
-  return match ? match[1]!.toLowerCase() : null;
-}
-
 async function expectedDelegatedCapType(client: IotaClient, systemPkg: string): Promise<string | null> {
   const getNormalizedMoveFunction = (client as any)?.getNormalizedMoveFunction;
   if (typeof getNormalizedMoveFunction !== "function") return null;
@@ -202,17 +174,6 @@ async function readObjectTypeAndOwner(
   return { type, ownerAddress };
 }
 
-async function resolveSystemPackageId(client: IotaClient, stateId: string, configuredPkg: string): Promise<string> {
-  try {
-    const stateInfo = await readObjectTypeAndOwner(client, stateId);
-    const fromStateType = typeTagPackageId(stateInfo.type);
-    if (fromStateType) return fromStateType;
-  } catch {
-    // Fall back to the configured package if the state object cannot be inspected.
-  }
-  return configuredPkg.toLowerCase();
-}
-
 export async function registerOracleNode(opts: {
   client: IotaClient;
   oracleKeypair: Ed25519Keypair;
@@ -222,10 +183,11 @@ export async function registerOracleNode(opts: {
   acceptedTemplateIds?: number[];
 }): Promise<string> {
   const { client, oracleKeypair, oracleAddr, oraclePubkeyRaw32 } = opts;
-
+  const mode = resolveRegisterMode();
+  if (mode === "off") return "";
   const stateId = getStateId();
-  const nodeRegistryId = await resolveNodeRegistryId(client, stateId);
-  const pkg = await resolveSystemPackageId(client, stateId, getSystemPackageId());
+  const pkg = getSystemPackageId();
+  const nodeRegistryId = await validateRegistrationState(client, stateId, pkg, envByNetwork("ORACLE_NODE_REGISTRY_ID"));
   const currentNode = await readRegisteredOracleNodeByAddr(client, oracleAddr, stateId);
   const persistedAcceptedTemplateIds = opts.nodeId ? loadPersistedAcceptedTemplateIds(opts.nodeId) : [];
   const effectiveAcceptedTemplateIds = (
@@ -235,9 +197,6 @@ export async function registerOracleNode(opts: {
   )
     .map((n) => Math.floor(Number(n)))
     .filter((n) => Number.isFinite(n) && n >= 0);
-
-  const mode = resolveRegisterMode();
-  if (mode === "off") return "";
 
   if (mode === "prod") {
     const signer = oracleKeypair;

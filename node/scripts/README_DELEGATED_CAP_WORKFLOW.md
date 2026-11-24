@@ -1,4 +1,10 @@
-# Delegated Controller Cap Workflow (Testnet/Devnet)
+# Delegated Controller Cap Workflow (Testnet)
+
+Devnet uses a separate cap-free system package. Do not use that registration
+path on testnet. For the security cutover, first follow the
+[fresh-publication migration procedure](../../docs/TESTNET_REGISTRATION_MIGRATION.md).
+Existing compatible delegated caps can be reused; fresh system publication does
+not require minting a new delegated cap when the validator-caps package is reused.
 
 This guide covers the full end-to-end flow:
 
@@ -87,7 +93,7 @@ iota client object <NEW_DELEGATED_CAP_ID> --json
 
 Expected:
 
-- type: `...::systemState::DelegatedControllerCap`
+- type: `<ORACLE_VALIDATOR_CAPS_PACKAGE_ID>::validator_caps::DelegatedControllerCap`
 - owner: `<NODE_ADDRESS>`
 - fields include `validator_address` and `validator_cap_id`
 

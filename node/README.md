@@ -80,8 +80,20 @@ Compose explicitly listens on the container interface and publishes the monitor
 only on host loopback. Do not expose it through a public reverse proxy; remote
 management should use a protected network or authenticated TLS proxy.
 
-On non-dev networks (`IOTA_NETWORK` not `dev`/`devnet`/`local`/`localnet`), registration is forced to `systemState::register_oracle_node` and requires a `systemState::DelegatedControllerCap` + signer key.
-If `DELEGATED_CONTROLLER_CAP_ID` is not configured, node auto-detects an owned `systemState::DelegatedControllerCap` from the signer address.
+On testnet/mainnet, registration uses `systemState::register_oracle_node` and
+requires a `validator_caps::DelegatedControllerCap` owned by the node signer,
+with a validator in the committee. `REGISTER_MODE=dev` is rejected on these
+networks; a missing/unknown `IOTA_NETWORK` also fails registration. Devnet/localnet
+retain cap-free registration through their separate system package.
+If `DELEGATED_CONTROLLER_CAP_ID` is not configured, the node auto-detects a
+matching owned delegated cap. A supervisor `ControllerCap` is not a substitute.
+
+For the testnet security cutover, follow
+[the full migration procedure](../docs/TESTNET_REGISTRATION_MIGRATION.md).
+Update the package, State, registry, treasury and queue IDs together, including
+network/per-node overrides. Preserve keys and delegated caps, then recreate the
+service and confirm successful re-registration. Historical `.env.example` IDs
+are not proof of a corrected on-chain deployment.
 
 ## CLI commands
 

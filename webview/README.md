@@ -165,3 +165,10 @@ ORACLE_EXAMPLES_DIR=examples
 ```
 
 For backward compatibility, `ORACLE_CLIENT_EXAMPLES_DIR` is still accepted, but recommended variable is `ORACLE_EXAMPLES_DIR`.
+
+## Testnet registration security migration
+
+Update the system/tasks package IDs, State, NodeRegistry, treasury, task registry
+and queue from one fresh publication, then rebuild/recreate the Webview. Verify
+the live dashboard points to the new registry before reopening task submission.
+See [the migration procedure](../docs/TESTNET_REGISTRATION_MIGRATION.md).
