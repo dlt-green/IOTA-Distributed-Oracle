@@ -11,7 +11,7 @@ Positive validator registration and task consensus still require a partner test.
 From the existing repository checkout, run:
 
 ```bash
-git pull --ff-only && bash ./update.sh --skip-git --network testnet --no-webview
+git pull --ff-only origin main && bash ./update.sh --skip-git --network testnet --no-webview
 ```
 
 No interactive prompts or manual package-ID edits are required. Existing wallet

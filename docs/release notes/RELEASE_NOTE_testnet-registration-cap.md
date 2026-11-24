@@ -6,7 +6,7 @@ Published on testnet on 24 November 2026. Exact IDs and transaction digests:
 Partner upgrade from an existing checkout (valid delegated cap required):
 
 ```bash
-git pull --ff-only && bash ./update.sh --skip-git --network testnet --no-webview
+git pull --ff-only origin main && bash ./update.sh --skip-git --network testnet --no-webview
 ```
 
 This updates IDs and per-node overrides, preserves cap/private-key/RPC settings,

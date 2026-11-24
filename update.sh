@@ -254,7 +254,7 @@ fi
 
 if [[ "$SKIP_GIT" == 0 ]]; then
   log "Pulling latest code"
-  git pull --ff-only
+  git pull --ff-only origin main
 fi
 
 backup_envs
