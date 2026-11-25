@@ -4,6 +4,7 @@
 import { optInt, acceptsTemplate } from "../nodeConfig";
 import { bytesToUtf8, decodeVecU8 } from "../events";
 import { executeTask } from "../taskExec";
+import { buildNoCommitDiagnostic } from "../noCommitDiagnostic";
 import { publishNoCommit } from "../taskSignFlow";
 import type { NodeContext } from "../nodeContext";
 import { assertCommitteeMultisigAddress, buildMultiSigPublicKey } from "../multisig.js";
@@ -126,106 +127,6 @@ async function deriveAssignedCommitteeMultisigAddress(
     multisigAddr,
     context,
   });
-}
-
-function truncateForDiagnostic(value: string, max = 180): string {
-  const text = String(value ?? "").replace(/\s+/g, " ").trim();
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}...`;
-}
-
-function pickTaskTarget(payload: any): string | null {
-  const candidates = [
-    payload?.request?.url,
-    payload?.source?.url,
-    payload?.url,
-    payload?.source?.kind,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim()) {
-      return truncateForDiagnostic(candidate, 220);
-    }
-  }
-
-  return null;
-}
-
-function inferDiagnosticStage(taskType: string, errMsg: string): string {
-  const msg = errMsg.toLowerCase();
-  if (msg.includes("missing payload.") || msg.includes("missing template_id") || msg.includes("invalid ") || msg.includes("unsupported task type")) {
-    return "input_validation";
-  }
-  if (msg.includes("http ") || msg.includes("timeout") || msg.includes("fetch") || msg.includes("download")) {
-    return "input_fetch";
-  }
-  if (msg.includes("json response") || msg.includes("parse") || msg.includes("schema")) {
-    return "parse_or_schema";
-  }
-  if (msg.includes("ipfs")) {
-    return "storage_upload";
-  }
-  if (msg.includes("llm") || taskType.startsWith("LLM_")) {
-    return "llm_call";
-  }
-  return "task_execute";
-}
-
-function inferErrorClass(errMsg: string): string {
-  const msg = errMsg.toLowerCase();
-  if (msg.includes("timeout")) return "timeout";
-  if (msg.includes("http ")) return "http_error";
-  if (msg.includes("schema")) return "schema_error";
-  if (msg.includes("json")) return "json_error";
-  if (msg.includes("ipfs")) return "ipfs_error";
-  if (msg.includes("llm")) return "llm_error";
-  if (msg.includes("missing ") || msg.includes("invalid ")) return "validation_error";
-  return "execution_error";
-}
-
-function buildNoCommitDiagnostic(params: {
-  nodeAddress: string;
-  nodeId: string;
-  taskId: string;
-  round: number;
-  taskType: string;
-  templateId: number;
-  reasonCode: number;
-  payloadJson: any;
-  errMsg: string;
-  elapsedMs: number;
-}): string {
-  const {
-    nodeAddress,
-    nodeId,
-    taskId,
-    round,
-    taskType,
-    templateId,
-    reasonCode,
-    payloadJson,
-    errMsg,
-    elapsedMs,
-  } = params;
-
-  const diagnostic = {
-    schema: "oracle_no_commit_diag_v1",
-    node_address: nodeAddress,
-    node_id: nodeId,
-    task_id: taskId,
-    round,
-    task_type: taskType,
-    template_id: templateId,
-    stage: inferDiagnosticStage(taskType, errMsg),
-    error_class: inferErrorClass(errMsg),
-    reason_code: reasonCode,
-    error_message: truncateForDiagnostic(errMsg, 320),
-    target: pickTaskTarget(payloadJson),
-    elapsed_ms: Math.max(0, Math.floor(elapsedMs)),
-    emitted_at: new Date().toISOString(),
-  };
-
-  return JSON.stringify(diagnostic);
 }
 
 function meanFloor(values: number[]): number {
@@ -810,7 +711,6 @@ export async function processAssigned(
       taskType,
       templateId,
       reasonCode: 1,
-      payloadJson,
       errMsg,
       elapsedMs: Date.now() - executionStartedAt,
     });
