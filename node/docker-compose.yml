@@ -5,6 +5,12 @@ services:
       dockerfile: Dockerfile
     container_name: oracle-node-1
     restart: unless-stopped
+    # Rotation is per container; export logs before an update recreates it.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "10"
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 120s

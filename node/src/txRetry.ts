@@ -7,6 +7,47 @@ import { attachFreshGasPayment } from './gas.js';
 import { pinRpc, RECORD_EFFECTS, ROTATE_RPC } from './rpcConsistency';
 import { journalPath, readJournal, writeJournal } from './daemonJournal';
 import { createHash } from 'node:crypto';
+import { TransactionDataBuilder } from '@iota/iota-sdk/transactions';
+import { verifyTransactionSignature } from '@iota/iota-sdk/verify';
+
+type PendingTransaction = {
+  digest?: string; label?: string; intent?: string; effects?: any;
+  signed?: { bytes: string; signature: string; owner: string; journal: string };
+  replayAttempts?: number; nextReplayAt?: number;
+};
+
+async function replayPending(client: IotaClient, pending: PendingTransaction, path: string,
+  owner: string, options?: Record<string, any>) {
+  if (!pending.signed) throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest} reason=LEGACY_JOURNAL_NO_SIGNED_TRANSACTION`);
+  const signed = pending.signed;
+  // Validate the saved authorization before using it. Never rebuild or sign here.
+  try {
+    const bytes = Buffer.from(signed.bytes, 'base64');
+    if (bytes.toString('base64') !== signed.bytes || signed.owner !== owner || signed.journal !== path ||
+        TransactionDataBuilder.getDigestFromBytes(bytes) !== pending.digest ||
+        TransactionDataBuilder.fromBytes(bytes).sender !== owner) throw new Error();
+    await verifyTransactionSignature(bytes, signed.signature, { address: owner });
+  } catch { throw new Error('TRANSACTION_JOURNAL_SIGNED_DATA_INVALID'); }
+  if (Date.now() < (pending.nextReplayAt ?? 0)) {
+    throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest} reason=REPLAY_BACKOFF`);
+  }
+  const attempts = Math.min((pending.replayAttempts ?? 0) + 1, 20);
+  // Persist throttling before network I/O, including across process restarts.
+  writeJournal(path, { ...pending, replayAttempts: attempts,
+    nextReplayAt: Date.now() + Math.min(300_000, 2000 * 2 ** (attempts - 1)) });
+  let result: any;
+  try {
+    result = await client.executeTransactionBlock({ transactionBlock: signed.bytes,
+      signature: signed.signature, options: { ...options, showEffects: true } });
+  } catch (cause) {
+    // A rejection during recovery does not establish the outcome of the first send.
+    throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest} reason=REPLAY_FAILED`, { cause });
+  }
+  if (result.digest !== pending.digest || !result.effects?.status) {
+    throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest} reason=REPLAY_UNCONFIRMED`);
+  }
+  return result;
+}
 
 function envInt(name: string, def: number): number {
   const raw = process.env[name]?.trim();
@@ -66,12 +107,18 @@ async function executeWithLockRetry(opts: {
   // An unknown previous submission blocks all new wallet writes until its effects are known.
   const intentData = transactionFactory ? transactionFactory().getData() : transaction?.getData();
   const intent = createHash('sha256').update(JSON.stringify(intentData)).digest('hex');
-  const pending = readJournal<{ digest?: string; label?: string; intent?: string; effects?: any }>(path);
+  const pending = readJournal<PendingTransaction>(path);
   if (pending?.effects) (client as any)[RECORD_EFFECTS]?.(pending.effects);
   if (pending?.digest) {
     let resolved: any;
     try { resolved = await client.getTransactionBlock({ digest: pending.digest, options: { ...options, showEffects: true } }); }
-    catch { throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest}`); }
+    catch (cause) {
+      // Match the explicit RPC not-found response, not timeouts or generic failures.
+      if (!String((cause as any)?.message ?? '').includes(`Could not find the referenced transaction [${pending.digest}]`)) {
+        throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest} reason=LOOKUP_FAILED`, { cause });
+      }
+      resolved = await replayPending(client, pending, path, signer.getPublicKey().toIotaAddress(), options);
+    }
     if (!resolved.effects?.status) throw new Error(`TRANSACTION_OUTCOME_UNKNOWN digest=${pending.digest}`);
     (client as any)[RECORD_EFFECTS]?.(resolved.effects);
     if (resolved.effects.status.status === 'success' && !resolved.checkpoint) {
@@ -96,9 +143,11 @@ async function executeWithLockRetry(opts: {
       }
       tx.setSenderIfNotSet(signer.getPublicKey().toIotaAddress());
       const bytes = await tx.build({ client });
-      const digest = await tx.getDigest({ client });
+      const digest = TransactionDataBuilder.getDigestFromBytes(bytes);
       const signed = await signer.signTransaction(bytes);
-      writeJournal(path, { digest, label, intent, effects: pending?.effects });
+      writeJournal(path, { digest, label, intent, effects: pending?.effects,
+        signed: { bytes: typeof signed.bytes === 'string' ? signed.bytes : Buffer.from(signed.bytes).toString('base64'),
+          signature: signed.signature, owner: signer.getPublicKey().toIotaAddress(), journal: path } });
       let result = await client.executeTransactionBlock({
         transactionBlock: signed.bytes,
         signature: signed.signature,
